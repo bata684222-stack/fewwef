@@ -1,5 +1,5 @@
-// WorkshopAG v3 — тот же API, но надёжнее, быстрее и безопаснее
-// npm i express cors bcryptjs jsonwebtoken multer helmet express-rate-limit compression
+// WorkshopAG v5 — тот же API, но с постоянным хранилищем (файл / Postgres / Key Value)
+// npm i express cors bcryptjs jsonwebtoken multer helmet express-rate-limit compression pg redis
 'use strict';
 const express = require('express');
 const cors = require('cors');
@@ -13,6 +13,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
+const { store, DB_FILE, UP_DIR, mimeOf } = require('./store');
 
 // ───────────────────────── конфиг ─────────────────────────
 const PROD = process.env.NODE_ENV === 'production';
@@ -31,10 +32,6 @@ if (!JWT_SECRET) {
 }
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const UP_DIR = path.join(PUBLIC_DIR, 'uploads');
-const DB_FILE = path.join(__dirname, 'data', 'db.json');
-fs.mkdirSync(UP_DIR, { recursive: true });
-fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
 
 // ───────────────────────── ошибки ─────────────────────────
 class HttpError extends Error {
@@ -49,7 +46,7 @@ const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch
 function emptyDB() { return { users: [], posts: [], comments: [], votes: {}, threads: [], treplies: [], dms: [] }; }
 
 function parseDB(raw) {
-  const db = JSON.parse(raw);
+  const db = typeof raw === 'string' ? JSON.parse(raw) : raw;
   db.users = db.users || []; db.posts = db.posts || []; db.comments = db.comments || [];
   db.threads = db.threads || []; db.treplies = db.treplies || []; db.dms = db.dms || [];
   if (Array.isArray(db.votes)) { // миграция со старого формата (массив)
@@ -60,22 +57,26 @@ function parseDB(raw) {
   return db;
 }
 
-function loadDB() {
-  let raw;
-  try { raw = fs.readFileSync(DB_FILE, 'utf8'); }
-  catch (e) { if (e.code === 'ENOENT') return emptyDB(); throw e; }
-  try { return parseDB(raw); }
-  catch (e) {
-    // НЕ затираем битую базу молча (раньше это стирало все данные)
-    const copy = DB_FILE + '.corrupt-' + Date.now();
-    fs.copyFileSync(DB_FILE, copy);
-    console.error('db.json повреждён, копия: ' + copy + '. Пробую бэкап…');
-    try { return parseDB(fs.readFileSync(DB_FILE + '.bak', 'utf8')); }
-    catch (_) { console.error('Бэкап тоже недоступен. Остановка, чтобы не потерять данные.'); process.exit(1); }
+// читаем из постоянного хранилища; если там пусто — пробуем забрать локальный db.json
+async function loadDB() {
+  let loaded = null;
+  try { loaded = await store.load(); }
+  catch (e) { console.error('[store] не смог прочитать:', e.message); }
+  if (loaded) {
+    try { return parseDB(loaded); }
+    catch (e) { console.error('[store] данные повреждены:', e.message); }
   }
+  try { // миграция с диска (первый запуск с DATABASE_URL)
+    const raw = await fsp.readFile(DB_FILE, 'utf8');
+    const db = parseDB(raw);
+    const moved = await store.migrateFilesFromDisk();
+    await store.save(db);
+    console.log('[store] перенёс с диска: юзеров ' + db.users.length + ', постов ' + db.posts.length + ', файлов ' + moved);
+    return db;
+  } catch (_) { return emptyDB(); }
 }
 
-let db = loadDB();
+let db = emptyDB(); // заполняется в boot()
 
 // индексы в памяти: поиск O(1) вместо filter/find по массивам на каждый запрос
 const usersById = new Map();
@@ -96,58 +97,49 @@ function rebuildIndexes() {
   }
   for (const c of db.comments) st(c.postId).c++;
 }
-rebuildIndexes();
 
-// сохранение: дебаунс + атомарная запись (tmp → rename) + почасовой бэкап
-let saveTimer = null, saving = false, lastBackup = 0;
+// сохранение: дебаунс + очередь, ошибки не теряем (повторяем)
+let saveTimer = null, saving = false;
 function saveDB() { if (!saveTimer) saveTimer = setTimeout(flushDB, 250); }
 async function flushDB() {
   saveTimer = null;
-  if (saving) return saveDB();
+  if (saving) { saveTimer = setTimeout(flushDB, 250); return; }
   saving = true;
-  const tmp = DB_FILE + '.tmp';
-  try {
-    await fsp.writeFile(tmp, JSON.stringify(db));
-    if (Date.now() - lastBackup > 3600e3) {
-      await fsp.copyFile(DB_FILE, DB_FILE + '.bak').catch(() => {});
-      lastBackup = Date.now();
-    }
-    await fsp.rename(tmp, DB_FILE);
-  } catch (e) {
-    console.error('Ошибка сохранения БД:', e);
-    setTimeout(saveDB, 2000); // повторить
+  try { await store.save(db); }
+  catch (e) {
+    console.error('Ошибка сохранения БД:', e.message);
+    saveTimer = setTimeout(flushDB, 3000); // повторить
   } finally { saving = false; }
 }
-function flushDBSync() {
-  try { fs.writeFileSync(DB_FILE + '.tmp', JSON.stringify(db)); fs.renameSync(DB_FILE + '.tmp', DB_FILE); }
-  catch (e) { console.error('Не удалось сохранить при выходе:', e); }
+function flushDBSync() { // на выходе: синхронно нельзя (async-хранилище), просто помечаем
+  if (store.kind === 'file') {
+    try { fs.writeFileSync(DB_FILE + '.tmp', JSON.stringify(db)); fs.renameSync(DB_FILE + '.tmp', DB_FILE); }
+    catch (e) { console.error('Не удалось сохранить при выходе:', e.message); }
+  }
 }
 
 const uid = () => crypto.randomUUID();
 const DUMMY_HASH = bcrypt.hashSync('dummy-password', BCRYPT_COST); // против тайминг-атаки на логин
 
 // ───────────────────────── файлы ─────────────────────────
+// При DATABASE_URL/REDIS_URL файлы живут в базе (диск обнуляется при деплое),
+// при их отсутствии — на диске. multer работает в памяти, дальше кладём в store.
 const MIME_EXT = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif' };
 
-const storage = multer.diskStorage({
-  destination: (_r, _f, cb) => cb(null, UP_DIR),
-  filename: (_r, f, cb) => {
-    // расширение НЕ берём из имени пользователя (можно было залить .html и получить XSS)
-    const ext = f.fieldname === 'jsonfile' ? '.json' : (MIME_EXT[f.mimetype] || '.bin');
-    cb(null, Date.now() + '-' + crypto.randomBytes(8).toString('hex') + ext);
-  }
+const upload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter(_r, f, cb) {
+    if (f.fieldname === 'photo' || f.fieldname === 'avatar') {
+      return MIME_EXT[f.mimetype] ? cb(null, true) : cb(new HttpError(400, 'only_images'));
+    }
+    if (f.fieldname === 'jsonfile') {
+      return (f.mimetype === 'application/json' || /\.json$/i.test(f.originalname || ''))
+        ? cb(null, true) : cb(new HttpError(400, 'only_json'));
+    }
+    cb(null, false);
+  },
+  limits: { fileSize: IMG_MAX, files: 2, fields: 10 }
 });
-function fileFilter(_r, f, cb) {
-  if (f.fieldname === 'photo' || f.fieldname === 'avatar') {
-    return MIME_EXT[f.mimetype] ? cb(null, true) : cb(new HttpError(400, 'only_images'));
-  }
-  if (f.fieldname === 'jsonfile') {
-    return (f.mimetype === 'application/json' || /\.json$/i.test(f.originalname || ''))
-      ? cb(null, true) : cb(new HttpError(400, 'only_json'));
-  }
-  cb(null, false);
-}
-const upload = multer({ storage, fileFilter, limits: { fileSize: IMG_MAX, files: 2, fields: 10 } });
 
 function sniffImage(b) { // проверка по сигнатуре, а не по заявленному mimetype
   if (b.length < 12) return null;
@@ -158,32 +150,39 @@ function sniffImage(b) { // проверка по сигнатуре, а не п
   if (b.toString('ascii', 0, 4) === 'RIFF' && b.toString('ascii', 8, 12) === 'WEBP') return '.webp';
   return null;
 }
-async function readHead(file) {
-  const fh = await fsp.open(file, 'r');
-  try { const b = Buffer.alloc(12); await fh.read(b, 0, 12, 0); return b; }
-  finally { await fh.close(); }
-}
+async function readHead(buf) { return buf; }
+
 const collectFiles = req => [
   ...(req.file ? [req.file] : []),
   ...Object.values(req.files || {}).flat()
 ];
+// rel вида 'uploads/<name>' → достаём имя и удаляем из хранилища
+function fileName(rel) {
+  if (!rel || typeof rel !== 'string') return null;
+  const base = path.basename(rel);
+  return base && base !== '.' && base !== '..' ? base : null;
+}
 function safeUnlink(rel) {
-  if (!rel || typeof rel !== 'string') return;
-  fsp.unlink(path.join(UP_DIR, path.basename(rel))).catch(() => {}); // basename = защита от path traversal
+  const n = fileName(rel);
+  if (n) store.delFile(n).catch(() => {});
+}
+// кладём файл в хранилище (storedName — это уже проверенное расширение '.png'/'.jpg'/'.json')
+async function persistUpload(f) {
+  const ext = /^\.(png|jpg|jpeg|webp|gif|json)$/i.test(f.storedName || '') ? f.storedName.toLowerCase() : '.bin';
+  const name = await store.putFile(ext, f.buffer);
+  f.storedName = name;
+  return name;
 }
 async function validateUploads(req) {
   for (const f of collectFiles(req)) {
     if (f.fieldname === 'jsonfile') {
       if (f.size > JSON_MAX) fail(400, 'file_too_big');
-      try { JSON.parse(await fsp.readFile(f.path, 'utf8')); } catch (_) { fail(400, 'bad_json'); }
+      try { JSON.parse(f.buffer.toString('utf8')); } catch (_) { fail(400, 'bad_json'); }
+      f.storedName = '.json';
     } else {
-      const ext = sniffImage(await readHead(f.path));
+      const ext = sniffImage(f.buffer);          // по сигнатуре, не по заявленному mimetype
       if (!ext) fail(400, 'only_images');
-      if (!f.filename.endsWith(ext)) { // имя по реальному типу
-        const nf = f.filename.replace(/\.[^.]+$/, '') + ext;
-        await fsp.rename(f.path, path.join(UP_DIR, nf));
-        f.filename = nf; f.path = path.join(UP_DIR, nf);
-      }
+      f.storedName = ext;
     }
   }
 }
@@ -217,8 +216,18 @@ app.use('/api/', limiter(60e3, 300));
 const authLimiter = limiter(15 * 60e3, 30);
 const writeLimiter = limiter(60e3, 60);
 
-// статика: кэш; загрузки неизменяемы (имена случайные)
-app.use('/uploads', express.static(UP_DIR, { maxAge: '30d', immutable: true, index: false, dotfiles: 'deny' }));
+// загрузки: из хранилища (или с диска в режиме 'file'), имена неизменяемы → можно кэшировать вечно
+app.get('/uploads/:name', wrap(async (req, res) => {
+  const name = fileName(req.params.name);
+  if (!name) return res.status(404).end();
+  const buf = await store.getFile(name);
+  if (!buf) return res.status(404).end();
+  res.set('Content-Type', mimeOf(name));
+  res.set('Cache-Control', 'public, max-age=31536000, immutable');
+  res.set('Content-Disposition', mimeOf(name) === 'application/json' ? 'inline' : 'inline');
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.send(buf);
+}));
 app.use(express.static(PUBLIC_DIR, { maxAge: '1h', index: 'index.html', dotfiles: 'deny' }));
 
 // ───────────────────────── auth ─────────────────────────
@@ -313,7 +322,11 @@ app.patch('/api/me', authNeed, writeLimiter, ...withUploads(upload.single('avata
   }
   u.name = name;
   if (newPass) { u.pass = newPass; u.tv = (u.tv || 0) + 1; } // старые токены умирают
-  if (req.file) { safeUnlink(u.avatar); u.avatar = 'uploads/' + req.file.filename; }
+  if (req.file) {
+    const nm = await persistUpload(req.file);
+    safeUnlink(u.avatar); // старый аватар
+    u.avatar = 'uploads/' + nm;
+  }
   saveDB();
   res.json({ token: signToken(u), user: pubUser(u) });
 }));
@@ -378,10 +391,12 @@ app.post('/api/posts', authNeed, writeLimiter,
     if (title.length < 2) fail(400, 'short_title');
     const ph = req.files?.photo?.[0], js = req.files?.jsonfile?.[0];
     const u = req.user;
+    const photoName = ph ? await persistUpload(ph) : null;
+    const jsonName = js ? await persistUpload(js) : null;
     const p = {
       id: uid(), title, body, kind,
-      photo: ph ? 'uploads/' + ph.filename : null,
-      jsonUrl: js ? 'uploads/' + js.filename : null,
+      photo: photoName ? 'uploads/' + photoName : null,
+      jsonUrl: jsonName ? 'uploads/' + jsonName : null,
       jsonName: js ? String(js.originalname || 'file.json').slice(0, 80) : null,
       author: u.name, authorId: u.id, avatar: u.avatar || null, createdAt: Date.now()
     };
@@ -597,7 +612,8 @@ app.use((req, res, next) => {
 app.use((_req, res) => res.status(404).end());
 
 app.use((err, req, res, _next) => {
-  for (const f of collectFiles(req)) safeUnlink(f.filename); // убираем «осиротевшие» загрузки при любой ошибке
+  // убираем «осиротевшие» загрузки при любой ошибке
+  for (const f of collectFiles(req)) if (f.storedName) store.delFile(f.storedName).catch(() => {});
   if (err instanceof HttpError) return res.status(err.status).json({ error: err.code });
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'file_too_big' : 'bad_upload' });
@@ -609,15 +625,32 @@ app.use((err, req, res, _next) => {
 });
 
 // ───────────────────────── запуск / остановка ─────────────────────────
-const server = app.listen(PORT, () => console.log('WorkshopAG v3 on :' + PORT));
-server.requestTimeout = 30e3;
-server.headersTimeout = 15e3;
+let server = null;
+async function boot() {
+  await store.init();
+  db = await loadDB();
+  rebuildIndexes();
+  await store.save(db); // гарантируем, что данные есть в целевом хранилище
+  server = app.listen(PORT, () => {
+    console.log('WorkshopAG v5 on :' + PORT);
+    console.log('хранилище: ' + store.kind +
+      (store.kind === 'file' ? '  ⚠ данные НЕ переживут деплой — задай DATABASE_URL или REDIS_URL' : '  ✓ переживает деплой'));
+  });
+  server.requestTimeout = 30e3;
+  server.headersTimeout = 15e3;
+}
+boot().catch(e => { console.error('Не удалось запустить:', e); process.exit(1); });
 
 function shutdown(sig) {
   console.log(sig + ' — сохраняю и выхожу');
   clearTimeout(saveTimer);
-  server.close(() => { flushDBSync(); process.exit(0); });
-  setTimeout(() => { flushDBSync(); process.exit(0); }, 8000).unref();
+  // деплой шлёт SIGTERM: нельзя уйти, пока последние правки не в базе
+  const flush = () => store.save(db).catch(e => console.error('flush:', e.message))
+    .then(() => { flushDBSync(); });
+  const done = () => { flush().finally(() => process.exit(0)); };
+  if (!server) return done();
+  server.close(done);
+  setTimeout(done, 8000).unref();
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));

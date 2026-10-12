@@ -1,6 +1,9 @@
 node_modules/
 .env
 data/db.json
+data/db.json.bak
+data/db.json.tmp
+data/*.corrupt-*
 public/uploads/*
 !public/uploads/.gitkeep
 npm-debug.log

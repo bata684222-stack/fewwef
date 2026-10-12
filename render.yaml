@@ -10,3 +10,23 @@ services:
         value: production
       - key: JWT_SECRET
         generateValue: true
+
+# ─────────────────────────────────────────────────────────────
+# ПОСТОЯННОЕ ХРАНИЛИЩЬЕ (без него данные стираются при каждом деплое)
+#
+# Раскомментируй ОДИН вариант, создай базу в Render и подставь её
+# Internal Database URL (DATABASE_URL / REDIS_URL появятся автоматически
+# в переменных окружения этого сервиса).
+#
+#   databases:
+#     - name: workshopag-db
+#       plan: free          # ⚠ бесплатный Postgres живёт 30 дней, потом удаляется
+#       databaseName: workshopag
+#       user: workshopag
+#
+#   keyValueStores:
+#     - name: workshopag-kv
+#       plan: free
+#
+# Если план платный — поменяй plan на start (Postgres) и срок жизни не ограничен.
+# ─────────────────────────────────────────────────────────────
