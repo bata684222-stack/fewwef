@@ -28,6 +28,8 @@ npm start
 - `POST /api/posts/:id/vote {value:1|-1|0}`
 - `GET/POST /api/posts/:id/comments`, `DELETE /api/comments/:id`
 - `GET /api/health`
+- Форумы: `GET /api/forums`, `GET /api/threads?cat=&sort=active|new&q=`, `POST /api/threads {cat,title,body}`, `GET /api/threads/:id`, `POST /api/threads/:id/replies {text}`, `DELETE /api/threads/:id`, `DELETE /api/treplies/:id`
+- Личка: `GET /api/users?q=` (поиск акков), `GET /api/dm` (диалоги), `GET /api/dm/unread`, `GET/POST /api/dm/:uid`
 
 ## Деплой (Node 18+, `npm install`, старт `npm start`)
 

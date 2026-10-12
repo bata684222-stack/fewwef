@@ -44,12 +44,14 @@ const fail = (status, code) => { throw new HttpError(status, code); };
 const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 // ───────────────────────── база ─────────────────────────
-// Формат: { users:[], posts:[], comments:[], votes:{ "postId:userId": 1|-1 } }
-function emptyDB() { return { users: [], posts: [], comments: [], votes: {} }; }
+// Формат: { users:[], posts:[], comments:[], votes:{ "postId:userId": 1|-1 },
+//   threads:[], treplies:[], dms:[] }
+function emptyDB() { return { users: [], posts: [], comments: [], votes: {}, threads: [], treplies: [], dms: [] }; }
 
 function parseDB(raw) {
   const db = JSON.parse(raw);
   db.users = db.users || []; db.posts = db.posts || []; db.comments = db.comments || [];
+  db.threads = db.threads || []; db.treplies = db.treplies || []; db.dms = db.dms || [];
   if (Array.isArray(db.votes)) { // миграция со старого формата (массив)
     const m = {};
     for (const v of db.votes) m[v.postId + ':' + v.userId] = v.value;
@@ -79,6 +81,7 @@ let db = loadDB();
 const usersById = new Map();
 const usersByName = new Map(); // lower-case имя -> user
 const postsById = new Map();
+const threadsById = new Map();
 const stats = new Map();       // postId -> { l, d, c }
 
 const st = id => { let s = stats.get(id); if (!s) { s = { l: 0, d: 0, c: 0 }; stats.set(id, s); } return s; };
@@ -86,6 +89,7 @@ function rebuildIndexes() {
   usersById.clear(); usersByName.clear(); postsById.clear(); stats.clear();
   for (const u of db.users) { usersById.set(u.id, u); usersByName.set(u.name.toLowerCase(), u); }
   for (const p of db.posts) postsById.set(p.id, p);
+  for (const t of db.threads) threadsById.set(t.id, t);
   for (const [k, v] of Object.entries(db.votes)) {
     const s = st(k.split(':')[0]);
     if (v === 1) s.l++; else if (v === -1) s.d++;
@@ -326,6 +330,12 @@ app.delete('/api/me', authNeed, writeLimiter, (req, res) => {
     const [pid, vu] = k.split(':');
     if (vu === u.id || ids.has(pid)) delete db.votes[k];
   }
+  // форумы и личка уходящего тоже стираются
+  const myThreads = new Set(db.threads.filter(t => t.authorId === u.id).map(t => t.id));
+  db.threads = db.threads.filter(t => t.authorId !== u.id);
+  db.treplies = db.treplies.filter(r => r.authorId !== u.id && !myThreads.has(r.threadId));
+  db.dms = db.dms.filter(m => m.fromId !== u.id && m.toId !== u.id);
+  for (const id of myThreads) threadsById.delete(id);
   db.users = db.users.filter(x => x.id !== u.id);
   usersById.delete(u.id); usersByName.delete(u.name.toLowerCase());
   rebuildIndexes(); saveDB();
@@ -437,6 +447,145 @@ app.delete('/api/comments/:id', authNeed, writeLimiter, (req, res) => {
 });
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, posts: db.posts.length, users: db.users.length, uptime: Math.round(process.uptime()) }));
+
+// ───────────────────────── форумы ─────────────────────────
+const FORUM_CATS = [
+  { id: 'general', name: 'Общее' },
+  { id: 'proj', name: 'Снаряды' },
+  { id: 'build', name: 'Постройки' },
+  { id: 'help', name: 'Помощь' }
+];
+const catName = id => FORUM_CATS.find(c => c.id === id)?.name || 'Общее';
+function threadDTO(t, viewerId) {
+  const a = usersById.get(t.authorId);
+  let replies = 0;
+  for (const r of db.treplies) if (r.threadId === t.id) replies++;
+  return {
+    id: t.id, cat: t.cat, catName: catName(t.cat), title: t.title, body: t.body,
+    author: a ? a.name : t.author, avatar: a ? a.avatar || null : null,
+    authorId: t.authorId, createdAt: t.createdAt, lastAt: t.lastAt || t.createdAt,
+    replies, my: !!viewerId && t.authorId === viewerId
+  };
+}
+app.get('/api/forums', (_req, res) => {
+  res.json(FORUM_CATS.map(c => {
+    let threads = 0, replies = 0, lastAt = 0;
+    for (const t of db.threads) if (t.cat === c.id) { threads++; lastAt = Math.max(lastAt, t.lastAt || t.createdAt); }
+    for (const r of db.treplies) { const t = threadsById.get(r.threadId); if (t && t.cat === c.id) replies++; }
+    return { ...c, threads, replies, lastAt };
+  }));
+});
+app.get('/api/threads', authOpt, (req, res) => {
+  const cat = String(req.query.cat || 'all');
+  const q = String(req.query.q || '').trim().toLowerCase().slice(0, 40);
+  const sort = String(req.query.sort || 'active');
+  const limit = clampInt(req.query.limit, 50, 1, 50);
+  const offset = clampInt(req.query.offset, 0, 0, 1e6);
+  let list = db.threads.slice();
+  if (cat !== 'all') list = list.filter(t => t.cat === cat);
+  if (q) list = list.filter(t => (t.title + ' ' + (t.body || '')).toLowerCase().includes(q));
+  if (sort === 'new') list.sort((a, b) => b.createdAt - a.createdAt);
+  else list.sort((a, b) => (b.lastAt || b.createdAt) - (a.lastAt || a.createdAt));
+  res.set('X-Total-Count', String(list.length));
+  res.json(list.slice(offset, offset + limit).map(t => threadDTO(t, req.user?.id)));
+});
+app.post('/api/threads', authNeed, writeLimiter, (req, res) => {
+  const cat = FORUM_CATS.find(c => c.id === req.body?.cat) ? req.body.cat : 'general';
+  const title = String(req.body?.title || '').trim().slice(0, 80);
+  const body = String(req.body?.body || '').trim().slice(0, 2000);
+  if (title.length < 2) fail(400, 'short_title');
+  const t = { id: uid(), cat, title, body, author: req.user.name, authorId: req.user.id, createdAt: Date.now(), lastAt: Date.now() };
+  db.threads.unshift(t); threadsById.set(t.id, t); saveDB();
+  res.json(threadDTO(t, req.user.id));
+});
+app.get('/api/threads/:id', authOpt, (req, res) => {
+  const t = threadsById.get(req.params.id);
+  if (!t) fail(404, 'not_found');
+  const replies = db.treplies.filter(r => r.threadId === t.id).sort((a, b) => a.createdAt - b.createdAt)
+    .map(r => ({ ...r, author: usersById.get(r.authorId)?.name || r.author }));
+  res.json({ thread: threadDTO(t, req.user?.id), replies });
+});
+app.post('/api/threads/:id/replies', authNeed, writeLimiter, (req, res) => {
+  const t = threadsById.get(req.params.id);
+  if (!t) fail(404, 'not_found');
+  const text = String(req.body?.text || '').trim().slice(0, 1000);
+  if (!text) fail(400, 'empty');
+  const r = { id: uid(), threadId: t.id, author: req.user.name, authorId: req.user.id, text, createdAt: Date.now() };
+  db.treplies.push(r); t.lastAt = Date.now(); saveDB();
+  res.json({ ...r, author: req.user.name });
+});
+app.delete('/api/threads/:id', authNeed, writeLimiter, (req, res) => {
+  const t = threadsById.get(req.params.id);
+  if (!t) fail(404, 'not_found');
+  if (t.authorId !== req.user.id) fail(403, 'not_yours');
+  db.threads = db.threads.filter(x => x.id !== t.id);
+  db.treplies = db.treplies.filter(r => r.threadId !== t.id);
+  threadsById.delete(t.id); saveDB();
+  res.json({ ok: true });
+});
+app.delete('/api/treplies/:id', authNeed, writeLimiter, (req, res) => {
+  const r = db.treplies.find(x => x.id === req.params.id);
+  if (!r) fail(404, 'not_found');
+  if (r.authorId !== req.user.id) fail(403, 'not_yours');
+  db.treplies = db.treplies.filter(x => x.id !== r.id); saveDB();
+  res.json({ ok: true });
+});
+
+// ───────────────────────── личка ─────────────────────────
+const dmDTO = (m, selfId) => {
+  const peerId = m.fromId === selfId ? m.toId : m.fromId;
+  const peer = usersById.get(peerId);
+  return { ...m, peer: peer ? { id: peer.id, name: peer.name, avatar: peer.avatar || null } : { id: peerId, name: 'Удалён', avatar: null } };
+};
+app.get('/api/users', authNeed, (req, res) => {
+  const q = String(req.query.q || '').trim().toLowerCase().slice(0, 20);
+  const limit = clampInt(req.query.limit, 20, 1, 20);
+  let list = db.users.filter(u => u.id !== req.user.id);
+  if (q) list = list.filter(u => u.name.toLowerCase().includes(q));
+  list = list.slice(0, limit).map(u => ({ id: u.id, name: u.name, avatar: u.avatar || null }));
+  res.json(list);
+});
+app.get('/api/dm/unread', authNeed, (req, res) => {
+  let n = 0;
+  for (const m of db.dms) if (m.toId === req.user.id && !m.read) n++;
+  res.json({ unread: n });
+});
+app.get('/api/dm', authNeed, (req, res) => {
+  const self = req.user.id, conv = new Map();
+  for (const m of db.dms) {
+    if (m.fromId !== self && m.toId !== self) continue;
+    const peerId = m.fromId === self ? m.toId : m.fromId;
+    const cur = conv.get(peerId);
+    if (!cur || m.createdAt >= cur.lastAt) {
+      conv.set(peerId, { peerId, lastText: m.text, lastAt: m.createdAt, unread: (cur?.unread || 0) + (m.toId === self && !m.read ? 1 : 0) });
+    } else if (m.toId === self && !m.read) cur.unread++;
+  }
+  const list = [...conv.values()].map(c => {
+    const peer = usersById.get(c.peerId);
+    return { user: peer ? { id: peer.id, name: peer.name, avatar: peer.avatar || null } : { id: c.peerId, name: 'Удалён', avatar: null }, lastText: c.lastText, lastAt: c.lastAt, unread: c.unread };
+  }).sort((a, b) => b.lastAt - a.lastAt);
+  res.json(list);
+});
+app.get('/api/dm/:uid', authNeed, (req, res) => {
+  const self = req.user.id, peer = req.params.uid;
+  if (peer === self) fail(400, 'bad_request');
+  const list = db.dms.filter(m => (m.fromId === self && m.toId === peer) || (m.fromId === peer && m.toId === self))
+    .sort((a, b) => a.createdAt - b.createdAt).slice(-300);
+  let touched = false;
+  for (const m of list) if (m.toId === self && !m.read) { m.read = true; touched = true; }
+  if (touched) saveDB();
+  res.json(list.map(m => dmDTO(m, self)));
+});
+app.post('/api/dm/:uid', authNeed, writeLimiter, (req, res) => {
+  const self = req.user.id, peer = req.params.uid;
+  if (peer === self) fail(400, 'bad_request');
+  if (!usersById.has(peer)) fail(404, 'not_found');
+  const text = String(req.body?.text || '').trim().slice(0, 1000);
+  if (!text) fail(400, 'empty');
+  const m = { id: uid(), fromId: self, toId: peer, text, createdAt: Date.now(), read: false };
+  db.dms.push(m); saveDB();
+  res.json(dmDTO(m, self));
+});
 
 // ───────────────────────── fallback и ошибки ─────────────────────────
 app.use('/api', (_req, res) => res.status(404).json({ error: 'not_found' }));

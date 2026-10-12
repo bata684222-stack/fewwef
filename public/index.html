@@ -156,9 +156,60 @@
     <div class="hint center" id="health" aria-live="polite"></div>
   </main>
 
+  <!-- ФОРУМЫ -->
+  <main id="page-forum" class="page" style="display:none">
+    <div class="seg" role="tablist" aria-label="Разделы форума" id="forum-cats"></div>
+    <div class="form" style="margin-top:12px">
+      <label class="fld">Новая тема
+        <input id="th-title" placeholder="О чём поговорим?" maxlength="80" autocomplete="off">
+      </label>
+      <label class="fld">Текст
+        <textarea id="th-body" rows="3" placeholder="Подробности…" maxlength="2000"></textarea>
+      </label>
+      <button id="th-add" class="primary wide" type="button">Создать тему</button>
+    </div>
+    <h3>Темы</h3>
+    <div id="threads"></div>
+    <div class="empty" id="threads-empty" hidden></div>
+  </main>
+
+  <!-- ТЕМА ФОРУМА -->
+  <main id="page-thread" class="page" style="display:none">
+    <button id="th-back" class="small" type="button">← К темам</button>
+    <div id="thread-view" style="margin-top:12px"></div>
+    <div class="form" style="margin-top:12px">
+      <label class="fld">Ответ
+        <textarea id="treply" rows="2" placeholder="Написать ответ…" maxlength="1000"></textarea>
+      </label>
+      <button id="treply-send" class="primary wide" type="button">Ответить</button>
+    </div>
+  </main>
+
+  <!-- ЛИЧКА -->
+  <main id="page-dm" class="page" style="display:none">
+    <div id="dm-list-view">
+      <h3>Найти человека</h3>
+      <div class="form">
+        <input id="dm-q" type="search" placeholder="Введи ник…" maxlength="20" autocomplete="off">
+        <div id="dm-found"></div>
+      </div>
+      <h3>Диалоги</h3>
+      <div id="dm-convos"></div>
+      <div class="empty" id="dm-empty" hidden></div>
+    </div>
+    <div id="dm-chat-view" hidden>
+      <button id="dm-back" class="small" type="button">← К диалогам</button>
+      <div class="chathead"><img id="dm-ava" src="AG.png" width="40" height="40" alt=""><b id="dm-name">—</b></div>
+      <div id="dm-msgs"></div>
+      <div class="cform"><input id="dm-text" placeholder="Сообщение…" maxlength="1000" aria-label="Сообщение" enterkeyhint="send"><button id="dm-send" class="icon-btn primary" type="button" aria-label="Отправить" data-ic="send"></button></div>
+    </div>
+  </main>
+
   <nav id="nav" aria-label="Основная навигация">
     <button id="nav-feed" class="on" type="button"><span class="ico" data-ic="home"></span><span>Лента</span></button>
+    <button id="nav-forum" type="button"><span class="ico" data-ic="forum"></span><span>Форумы</span></button>
     <button id="nav-add" type="button" title="Новый пост" aria-label="Новый пост"><span class="ico" data-ic="plus"></span></button>
+    <button id="nav-dm" type="button"><span class="ico" data-ic="mail"></span><span>ЛС</span><i class="bdot" id="dm-dot" hidden></i></button>
     <button id="nav-me" type="button"><span class="ico" data-ic="user"></span><span>Профиль</span></button>
     <button id="nav-set" type="button"><span class="ico" data-ic="gear"></span><span>Настройки</span></button>
   </nav>

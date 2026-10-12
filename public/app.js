@@ -10,6 +10,8 @@ const LS = {
 let token = LS.get('wsa_token'), me = null;
 let kind = 'all', sort = 'new', mode = 'register', postKind = 'proj';
 let curPage = null, feedDirty = true;
+let forumCats = [], forumCat = 'all', curThread = null;
+let dmPeer = null, dmName = '', dmTimer = null;
 const PAGE = 12;
 const feed = { offset: 0, total: 0, busy: false, done: false, req: 0 };
 
@@ -33,6 +35,8 @@ const ICON = {
   check: IC('<polyline points="20 6 9 17 4 12"/>'),
   logout: IC('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>'),
   home: IC('<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>'),
+  forum: IC('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
+  mail: IC('<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>'),
   plus: IC('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>'),
   user: IC('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'),
   gear: IC('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>')
@@ -56,7 +60,7 @@ const ERR = {
   file_too_big: 'Файл слишком большой', only_images: 'Нужна картинка png/jpg/webp/gif', only_json: 'Нужен файл .json',
   bad_json: 'Файл — не корректный JSON', short_title: 'Название слишком короткое', not_found: 'Не найдено',
   not_yours: 'Это не твоё', empty: 'Пусто', server_error: 'Ошибка сервера, попробуй позже', bad_upload: 'Ошибка загрузки файла',
-  too_big: 'Слишком большой запрос'
+  too_big: 'Слишком большой запрос', bad_request: 'Так нельзя'
 };
 const errText = e => ERR[e.message] || (/^http_/.test(e.message) ? 'Ошибка сети (' + e.message.slice(5) + ')' : 'Нет связи с сервером');
 
@@ -93,6 +97,8 @@ function showGate() { $('gate').style.display = 'flex'; $('app').style.display =
 function showApp() { $('gate').style.display = 'none'; $('app').style.display = 'flex'; }
 function logout(msg) {
   token = null; me = null; LS.del('wsa_token'); curPage = null; feedDirty = true;
+  stopDmPoll(); dmPeer = null; forumCats = []; forumCat = 'all'; curThread = null;
+  $('dm-dot').hidden = true;
   $('feed').replaceChildren(); $('mylist').replaceChildren();
   showGate(); if (msg) toast(msg);
 }
@@ -113,7 +119,7 @@ async function gateGo() {
     const r = await api('/api/' + mode, { method: 'POST', body: JSON.stringify({ name, password }) });
     token = r.token; me = r.user; LS.set('wsa_token', token);
     $('g-pass').value = '';
-    showApp(); curPage = null; feedDirty = true; nav('feed');
+    showApp(); curPage = null; feedDirty = true; nav('feed'); startDmPoll();
   } catch (e) { $('g-err').textContent = errText(e); }
   busy(btn, false);
 }
@@ -128,10 +134,11 @@ function bindEye(btnId, inputId) {
 }
 
 // ───────── навигация ─────────
-const PAGES = [['nav-feed', 'feed'], ['nav-add', 'add'], ['nav-me', 'me'], ['nav-set', 'set']];
+const PAGES = [['nav-feed', 'feed'], ['nav-forum', 'forum'], ['nav-add', 'add'], ['nav-dm', 'dm'], ['nav-me', 'me'], ['nav-set', 'set']];
 function nav(p) {
   if (p === 'feed' && curPage === 'feed') { window.scrollTo({ top: 0, behavior: 'smooth' }); load(); return; }
   curPage = p;
+  $('page-thread').style.display = p === 'thread' ? 'block' : 'none';
   for (const [id, pg] of PAGES) {
     const page = $('page-' + pg), b = $(id), on = pg === p;
     page.style.display = on ? 'block' : 'none';
@@ -140,6 +147,9 @@ function nav(p) {
     else b.removeAttribute('aria-current');
   }
   if (p === 'feed' && feedDirty) { feedDirty = false; load(); }
+  if (p === 'forum' && !forumCats.length) loadForums();
+  else if (p === 'forum') loadThreads();
+  if (p === 'dm') { dmToList(); loadConvos(); pollUnread(); }
   if (p === 'me') loadMine();
   if (p === 'set') loadSettings();
   window.scrollTo({ top: 0 });
@@ -315,6 +325,205 @@ async function sendComment(p, d, inp, btn) {
   btn.disabled = false; inp.focus();
 }
 
+// ───────── форумы ─────────
+async function loadForums() {
+  try {
+    const cats = await api('/api/forums');
+    forumCats = [{ id: 'all', name: 'Все' }, ...cats];
+    const box = $('forum-cats'); box.replaceChildren();
+    for (const c of forumCats) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = c.name + (c.threads ? ' · ' + c.threads : '');
+      b.classList.toggle('on', forumCat === c.id);
+      b.onclick = () => { forumCat = c.id; box.querySelectorAll('button').forEach(x => x.classList.remove('on')); b.classList.add('on'); loadThreads(); };
+      box.appendChild(b);
+    }
+    loadThreads();
+  } catch (e) { toast(errText(e), 'err'); }
+}
+async function loadThreads() {
+  const box = $('threads'); box.replaceChildren(skeletons(2)); $('threads-empty').hidden = true;
+  try {
+    const list = await api('/api/threads?' + new URLSearchParams({ cat: forumCat, sort: 'active', limit: 50 }));
+    box.replaceChildren();
+    if (!list.length) { const e = $('threads-empty'); e.innerHTML = ICON.forum + '<b>Тем пока нет</b><span>Создай первую выше</span>'; e.hidden = false; return; }
+    list.forEach((t, i) => {
+      const d = document.createElement('div');
+      d.className = 'trow'; d.style.animationDelay = Math.min(i * 40, 300) + 'ms';
+      d.innerHTML = '<b>' + esc(t.title) + '</b>' +
+        (t.body ? '<div class="tbody">' + esc(t.body) + '</div>' : '') +
+        '<div class="tmeta"><span class="tag">' + esc(t.catName) + '</span><span>' + esc(t.author) + ' · ' + ago(t.lastAt) + '</span><span class="rc">' + ICON.cmt.replace('class="ic"', 'class="ic" width="14" height="14"') + ' ' + t.replies + '</span></div>';
+      d.onclick = () => openThread(t.id);
+      box.appendChild(d);
+    });
+  } catch (e) { box.replaceChildren(); const x = $('threads-empty'); x.innerHTML = '<b>Ошибка</b><span>' + esc(errText(e)) + '</span>'; x.hidden = false; }
+}
+async function newThread() {
+  const title = $('th-title').value.trim(), body = $('th-body').value.trim();
+  if (title.length < 2) { toast('Дай теме название', 'err'); $('th-title').focus(); return; }
+  const btn = $('th-add'); busy(btn, true, 'Создаю…');
+  try {
+    const t = await api('/api/threads', { method: 'POST', body: JSON.stringify({ cat: forumCat === 'all' ? 'general' : forumCat, title, body }) });
+    $('th-title').value = ''; $('th-body').value = '';
+    loadForums(); openThread(t.id); toast('Тема создана', 'ok');
+  } catch (e) { toast(errText(e), 'err'); }
+  busy(btn, false);
+}
+async function openThread(id) {
+  try {
+    const { thread: t, replies } = await api('/api/threads/' + id);
+    curThread = t;
+    const v = $('thread-view');
+    const own = me && t.authorId === me.id;
+    v.innerHTML = '<div class="card"><div class="chead"><img class="ava" src="' + (t.avatar ? esc(url(t.avatar)) : 'AG.png') + '" alt="" width="40" height="40">' +
+      '<div class="who"><b>' + esc(t.author) + '</b><small>' + ago(t.createdAt) + '</small></div><span class="tag">' + esc(t.catName) + '</span></div>' +
+      '<div class="cbody"><h4 class="ctitle">' + esc(t.title) + '</h4>' + (t.body ? '<div class="ctext">' + esc(t.body) + '</div>' : '') + '</div>' +
+      '<div class="actions"><span class="hint">ответов: ' + replies.length + '</span><span class="spacer"></span>' +
+      (own ? '<button class="icon-btn del" id="th-del" type="button" title="Удалить тему">' + ICON.trash + '</button>' : '') + '</div>' +
+      '<div class="comments"><div class="clist" id="th-replies"></div></div></div>';
+    const list = v.querySelector('#th-replies');
+    list.innerHTML = replies.length ? '' : '<div class="hint noc">Ответов нет — напиши первым</div>';
+    for (const r of replies) list.appendChild(threadReplyEl(t, r, list));
+    const del = v.querySelector('#th-del');
+    if (del) del.onclick = async () => {
+      if (!confirm('Удалить тему и все ответы?')) return;
+      try { await api('/api/threads/' + t.id, { method: 'DELETE' }); curThread = null; nav('forum'); toast('Тема удалена', 'ok'); }
+      catch (e) { toast(errText(e), 'err'); }
+    };
+    nav('thread');
+  } catch (e) { toast(errText(e), 'err'); }
+}
+function threadReplyEl(t, r, list) {
+  const el = document.createElement('div'); el.className = 'cm';
+  el.innerHTML = '<div class="cmeta"><b>' + esc(r.author) + '</b><small>' + ago(r.createdAt) + '</small></div><p>' + esc(r.text) + '</p>';
+  if (me && r.authorId === me.id) {
+    const x = document.createElement('button');
+    x.type = 'button'; x.className = 'cdel icon-btn'; x.innerHTML = ICON.x; x.title = 'Удалить'; x.setAttribute('aria-label', 'Удалить ответ');
+    x.onclick = async () => {
+      try { await api('/api/treplies/' + r.id, { method: 'DELETE' }); el.remove(); if (!list.children.length) list.innerHTML = '<div class="hint noc">Ответов нет — напиши первым</div>'; }
+      catch (e) { toast(errText(e), 'err'); }
+    };
+    el.querySelector('.cmeta').appendChild(x);
+  }
+  return el;
+}
+async function sendReply() {
+  if (!curThread) return;
+  const text = $('treply').value.trim(); if (!text) return;
+  const btn = $('treply-send'); busy(btn, true, 'Отправляю…');
+  try {
+    await api('/api/threads/' + curThread.id + '/replies', { method: 'POST', body: JSON.stringify({ text }) });
+    $('treply').value = ''; openThread(curThread.id); loadForums();
+  } catch (e) { toast(errText(e), 'err'); }
+  busy(btn, false);
+}
+
+// ───────── личка ─────────
+async function pollUnread() {
+  if (!token) return;
+  try {
+    const { unread } = await api('/api/dm/unread');
+    const dot = $('dm-dot');
+    dot.hidden = !unread; dot.textContent = unread > 99 ? '99+' : unread;
+  } catch (_) {}
+}
+function dmToList() {
+  dmPeer = null; $('dm-list-view').hidden = false; $('dm-chat-view').hidden = true;
+}
+async function loadConvos() {
+  const box = $('dm-convos'); box.replaceChildren(); $('dm-empty').hidden = true;
+  try {
+    const list = await api('/api/dm');
+    if (!list.length) { const e = $('dm-empty'); e.innerHTML = ICON.mail + '<b>Диалогов нет</b><span>Найди человека выше и напиши первым</span>'; e.hidden = false; return; }
+    for (const c of list) {
+      const d = document.createElement('div'); d.className = 'convo';
+      d.innerHTML = '<img src="' + (c.user.avatar ? esc(url(c.user.avatar)) : 'AG.png') + '" alt="" loading="lazy"><div class="cinfo"><b>' + esc(c.user.name) + '</b><div class="clast">' + esc(c.lastText) + '</div></div>' +
+        '<span class="ctime">' + ago(c.lastAt) + '</span>' + (c.unread ? '<span class="unread-n">' + c.unread + '</span>' : '');
+      d.onclick = () => openChat(c.user.id, c.user.name, c.user.avatar);
+      box.appendChild(d);
+    }
+  } catch (e) { toast(errText(e), 'err'); }
+}
+let dmQT;
+async function dmSearch() {
+  const q = $('dm-q').value.trim(), box = $('dm-found'); box.replaceChildren();
+  if (q.length < 1) return;
+  try {
+    const users = await api('/api/users?' + new URLSearchParams({ q, limit: 10 }));
+    if (!users.length) { box.innerHTML = '<div class="hint">Никого не нашёл</div>'; return; }
+    for (const u of users) {
+      const d = document.createElement('div'); d.className = 'convo';
+      d.innerHTML = '<img src="' + (u.avatar ? esc(url(u.avatar)) : 'AG.png') + '" alt="" loading="lazy"><div class="cinfo"><b>' + esc(u.name) + '</b><div class="clast">написать сообщение →</div></div>';
+      d.onclick = () => openChat(u.id, u.name, u.avatar);
+      box.appendChild(d);
+    }
+  } catch (e) { toast(errText(e), 'err'); }
+}
+async function openChat(uid, name, avatar) {
+  dmPeer = uid; dmName = name;
+  $('dm-list-view').hidden = true; $('dm-chat-view').hidden = false;
+  $('dm-name').textContent = name; $('dm-ava').src = avatar ? url(avatar) : 'AG.png';
+  $('dm-text').value = '';
+  await loadChat();
+  pollUnread();
+}
+function bub(m) {
+  const mine = me && m.fromId === me.id;
+  const d = document.createElement('div');
+  d.className = 'bub ' + (mine ? 'me' : 'them');
+  d.innerHTML = esc(m.text) + '<small>' + new Date(m.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) + '</small>';
+  return d;
+}
+async function loadChat() {
+  if (!dmPeer) return;
+  const box = $('dm-msgs');
+  try {
+    const arr = await api('/api/dm/' + dmPeer);
+    const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
+    box.replaceChildren();
+    if (!arr.length) box.innerHTML = '<div class="hint center">Напиши первым — история пуста</div>';
+    for (const m of arr) box.appendChild(bub(m));
+    if (nearBottom || !box.dataset.once) { box.scrollTop = box.scrollHeight; box.dataset.once = 1; }
+    pollUnread(); loadConvosQuiet();
+  } catch (e) { toast(errText(e), 'err'); }
+}
+async function loadConvosQuiet() { // обновить список без мигания, пока открыт чат
+  try {
+    const list = await api('/api/dm');
+    const box = $('dm-convos'); if (!box) return;
+    box.replaceChildren(); $('dm-empty').hidden = true;
+    if (!list.length) { const e = $('dm-empty'); e.innerHTML = ICON.mail + '<b>Диалогов нет</b>'; e.hidden = false; return; }
+    for (const c of list) {
+      const d = document.createElement('div'); d.className = 'convo';
+      d.innerHTML = '<img src="' + (c.user.avatar ? esc(url(c.user.avatar)) : 'AG.png') + '" alt="" loading="lazy"><div class="cinfo"><b>' + esc(c.user.name) + '</b><div class="clast">' + esc(c.lastText) + '</div></div>' +
+        '<span class="ctime">' + ago(c.lastAt) + '</span>' + (c.unread ? '<span class="unread-n">' + c.unread + '</span>' : '');
+      d.onclick = () => openChat(c.user.id, c.user.name, c.user.avatar);
+      box.appendChild(d);
+    }
+  } catch (_) {}
+}
+async function sendDM() {
+  if (!dmPeer) return;
+  const inp = $('dm-text'), text = inp.value.trim(); if (!text) return;
+  inp.value = '';
+  try {
+    const m = await api('/api/dm/' + dmPeer, { method: 'POST', body: JSON.stringify({ text }) });
+    const box = $('dm-msgs'); box.querySelector('.hint')?.remove();
+    box.appendChild(bub(m)); box.scrollTop = box.scrollHeight;
+    loadConvosQuiet();
+  } catch (e) { toast(errText(e), 'err'); inp.value = text; }
+}
+function startDmPoll() {
+  stopDmPoll();
+  pollUnread();
+  dmTimer = setInterval(async () => {
+    if (!token || !$('app') || $('app').style.display === 'none') return;
+    pollUnread();
+    if (curPage === 'dm' && dmPeer && !$('dm-chat-view').hidden) loadChat();
+  }, 8000);
+}
+function stopDmPoll() { if (dmTimer) { clearInterval(dmTimer); dmTimer = null; } }
+
 // ───────── новый пост ─────────
 function pickFile(input, max, test, err) {
   const f = input.files[0]; if (!f) return null;
@@ -457,9 +666,21 @@ function init() {
   new IntersectionObserver(es => { if (es[0].isIntersecting && curPage === 'feed') load(false); }, { rootMargin: '500px' }).observe($('sentinel'));
 
   // нижняя навигация
-  $('nav-feed').onclick = () => nav('feed'); $('nav-add').onclick = () => nav('add');
+  $('nav-feed').onclick = () => nav('feed'); $('nav-forum').onclick = () => nav('forum');
+  $('nav-add').onclick = () => nav('add'); $('nav-dm').onclick = () => nav('dm');
   $('nav-me').onclick = () => nav('me'); $('nav-set').onclick = () => nav('set');
   $('me-edit').onclick = () => nav('set');
+
+  // форумы
+  $('th-add').onclick = newThread;
+  $('th-back').onclick = () => nav('forum');
+  $('treply-send').onclick = sendReply;
+
+  // личка
+  $('dm-q').oninput = () => { clearTimeout(dmQT); dmQT = setTimeout(dmSearch, 300); };
+  $('dm-back').onclick = () => { dmToList(); loadConvos(); };
+  $('dm-send').onclick = sendDM;
+  $('dm-text').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sendDM(); } });
 
   // форма поста
   $('kind-proj').onclick = () => setKind('proj'); $('kind-build').onclick = () => setKind('build');
@@ -504,7 +725,7 @@ function init() {
 
   // старт
   if (!token) { showGate(); return; }
-  showApp(); nav('feed');
+  showApp(); nav('feed'); startDmPoll();
   refreshMe().then(() => { if (curPage === 'me') loadMine(); }).catch(() => toast('Нет связи с сервером', 'err'));
 }
 init();
