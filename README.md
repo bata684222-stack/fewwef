@@ -16,6 +16,7 @@ npm start
 
 - Первый экран — меню РЕГИСТРАЦИЯ / ВОЙТИ
 - Лента (все / снаряды / постройки), поиск, сортировка новые/топ
+- Реакции под постами: 🔥 👏 🎯 🧠 💀 (можно ставить несколько, повторный клик снимает)
 - Новый пост: текст + фото (png/jpg/webp/gif, 5MB) + JSON-чертёж (проверяется, скачивается по ссылке)
 - Лайк/дизлайк (один голос на акк), комменты, удаление своих
 - Мой акк (аватар, мои посты), настройки (ник, пароль, аватар, удалить акк)
@@ -26,6 +27,8 @@ npm start
 - `GET /api/posts?kind=all|proj|build&q=&sort=new|top&limit=&offset=` (всего — в `X-Total-Count`)
 - `POST /api/posts` (multipart: `title, body, kind, photo, jsonfile`), `DELETE /api/posts/:id`
 - `POST /api/posts/:id/vote {value:1|-1|0}`
+- `GET /api/reactions` → `['🔥','👏','🎯','🧠','💀']`
+- `POST /api/posts/:id/react {emoji}` — переключает реакцию, возвращает пост с `reactions` и `myReactions`
 - `GET/POST /api/posts/:id/comments`, `DELETE /api/comments/:id`
 - `GET /api/health`
 - Форумы: `GET /api/forums`, `GET /api/threads?cat=&sort=active|new&q=`, `POST /api/threads {cat,title,body}`, `GET /api/threads/:id`, `POST /api/threads/:id/replies {text}`, `DELETE /api/threads/:id`, `DELETE /api/treplies/:id`
@@ -48,6 +51,8 @@ npm start
 | ничего | `data/db.json` + `public/uploads` | только для локальной разработки |
 
 **RelaxDev:** в панели проекта → вкладка «База данных» → **«Создать базу данных»** (PostgreSQL 17). Платформа сама добавит `DATABASE_URL` в переменные окружения, код подхватит его без настройки. После этого сделай редеплой.
+
+У внутренней БД RelaxDev **нет TLS** — это уже учтено: `sslmode/ssl/channel_binding` вырезаются из строки подключения, SSL отключается. Если у другого провайдера TLS нужен — поставь `DATABASE_SSL=true`. Для PgBouncer: `DATABASE_PGBOUNCER=true`. Размер пула: `DATABASE_POOL=5` (по умолчанию).
 
 Если хранилище недоступно, сервер не падает: пишет в лог предупреждение и продолжает на диске (данные переживут рестарт процесса, но не деплой).
 

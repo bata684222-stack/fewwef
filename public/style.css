@@ -131,6 +131,17 @@ h3::after{content:"";flex:1;height:1px;background:var(--line)}
 .del{color:var(--dim)}
 .del:hover{color:var(--bad);border-color:rgba(255,107,96,.4)}
 
+/* ---------- реакции ---------- */
+.react{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:0 14px 12px;position:relative}
+button.re{min-height:34px;padding:0 10px;border-radius:999px;background:var(--card2);font-size:16px;line-height:1;gap:5px}
+button.re:hover{background:#1d1d25;border-color:var(--line2)}
+button.re.on{background:rgba(245,166,35,.16);border-color:var(--acc)}
+button.re i{font-style:normal;font-size:12px;font-weight:700;color:var(--acc2)}
+button.re.add{color:var(--dim);font-size:13px;letter-spacing:.3px;padding:0 12px}
+button.re.add:hover{color:var(--acc2)}
+.reactpop{display:flex;gap:4px;position:absolute;bottom:calc(100% - 4px);left:12px;z-index:5;padding:6px;background:var(--card2);border:1px solid var(--line2);border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.6);animation:rise .15s both}
+.card{position:relative}
+
 /* комментарии */
 .comments{border-top:1px solid var(--line);padding:12px 14px 14px;background:rgba(255,255,255,.015)}
 .clist{display:flex;flex-direction:column;gap:8px}

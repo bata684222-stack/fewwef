@@ -43,12 +43,13 @@ const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch
 // ───────────────────────── база ─────────────────────────
 // Формат: { users:[], posts:[], comments:[], votes:{ "postId:userId": 1|-1 },
 //   threads:[], treplies:[], dms:[] }
-function emptyDB() { return { users: [], posts: [], comments: [], votes: {}, threads: [], treplies: [], dms: [] }; }
+function emptyDB() { return { users: [], posts: [], comments: [], votes: {}, reactions: {}, threads: [], treplies: [], dms: [] }; }
 
 function parseDB(raw) {
   const db = typeof raw === 'string' ? JSON.parse(raw) : raw;
   db.users = db.users || []; db.posts = db.posts || []; db.comments = db.comments || [];
   db.threads = db.threads || []; db.treplies = db.treplies || []; db.dms = db.dms || [];
+  db.reactions = db.reactions || {};
   if (Array.isArray(db.votes)) { // миграция со старого формата (массив)
     const m = {};
     for (const v of db.votes) m[v.postId + ':' + v.userId] = v.value;
@@ -85,7 +86,7 @@ const postsById = new Map();
 const threadsById = new Map();
 const stats = new Map();       // postId -> { l, d, c }
 
-const st = id => { let s = stats.get(id); if (!s) { s = { l: 0, d: 0, c: 0 }; stats.set(id, s); } return s; };
+const st = id => { let s = stats.get(id); if (!s) { s = { l: 0, d: 0, c: 0, r: {} }; stats.set(id, s); } return s; };
 function rebuildIndexes() {
   usersById.clear(); usersByName.clear(); postsById.clear(); stats.clear();
   for (const u of db.users) { usersById.set(u.id, u); usersByName.set(u.name.toLowerCase(), u); }
@@ -96,6 +97,12 @@ function rebuildIndexes() {
     if (v === 1) s.l++; else if (v === -1) s.d++;
   }
   for (const c of db.comments) st(c.postId).c++;
+  for (const [k, v] of Object.entries(db.reactions)) {
+    if (!v) continue;
+    const s = st(k.slice(0, k.indexOf('|')));      // ключ: postId|userId|emoji
+    const e = k.slice(k.lastIndexOf('|') + 1);
+    s.r[e] = (s.r[e] || 0) + 1;
+  }
 }
 
 // сохранение: дебаунс + очередь, ошибки не теряем (повторяем)
@@ -251,14 +258,20 @@ function authNeed(req, res, next) {
 }
 
 const pubUser = u => ({ id: u.id, name: u.name, avatar: u.avatar || null, createdAt: u.createdAt });
+const REACTIONS = ['🔥', '👏', '🎯', '🧠', '💀'];
 function postDTO(p, viewerId) {
-  const s = stats.get(p.id) || { l: 0, d: 0, c: 0 };
+  const s = stats.get(p.id) || { l: 0, d: 0, c: 0, r: {} };
   const a = usersById.get(p.authorId);
+  let mine = [];
+  if (viewerId) {
+    for (const e of REACTIONS) if (db.reactions[p.id + '|' + viewerId + '|' + e]) mine.push(e);
+  }
   return {
     ...p,
     author: a ? a.name : p.author,           // всегда актуальные ник/аватар
     avatar: a ? a.avatar || null : null,
     likes: s.l, dislikes: s.d, comments: s.c,
+    reactions: s.r, myReactions: mine,
     myVote: viewerId ? (db.votes[p.id + ':' + viewerId] || 0) : 0
   };
 }
@@ -343,6 +356,10 @@ app.delete('/api/me', authNeed, writeLimiter, (req, res) => {
     const [pid, vu] = k.split(':');
     if (vu === u.id || ids.has(pid)) delete db.votes[k];
   }
+  for (const k of Object.keys(db.reactions)) {
+    const [pid, , uid2] = k.split('|');
+    if (uid2 === u.id || ids.has(pid)) delete db.reactions[k];
+  }
   // форумы и личка уходящего тоже стираются
   const myThreads = new Set(db.threads.filter(t => t.authorId === u.id).map(t => t.id));
   db.threads = db.threads.filter(t => t.authorId !== u.id);
@@ -412,6 +429,7 @@ app.delete('/api/posts/:id', authNeed, writeLimiter, (req, res) => {
   db.posts = db.posts.filter(x => x.id !== p.id);
   db.comments = db.comments.filter(c => c.postId !== p.id);
   for (const k of Object.keys(db.votes)) if (k.startsWith(p.id + ':')) delete db.votes[k];
+  for (const k of Object.keys(db.reactions)) if (k.startsWith(p.id + '|')) delete db.reactions[k];
   postsById.delete(p.id); stats.delete(p.id);
   saveDB();
   res.json({ ok: true });
@@ -431,6 +449,22 @@ app.post('/api/posts/:id/vote', authNeed, writeLimiter, (req, res) => {
     if (v === 0) delete db.votes[key]; else db.votes[key] = v;
     saveDB();
   }
+  res.json(postDTO(p, req.user.id));
+});
+
+// ───────────────────────── реакции ─────────────────────────
+// одна реакция на эмодзи от пользователя; повторный клик снимает её
+app.get('/api/reactions', (_req, res) => res.json({ reactions: REACTIONS }));
+app.post('/api/posts/:id/react', authNeed, writeLimiter, (req, res) => {
+  const p = postsById.get(req.params.id);
+  if (!p) fail(404, 'not_found');
+  const emoji = String(req.body?.emoji || '');
+  if (!REACTIONS.includes(emoji)) fail(400, 'bad_reaction');
+  const key = p.id + '|' + req.user.id + '|' + emoji;
+  const s = st(p.id);
+  if (db.reactions[key]) { delete db.reactions[key]; s.r[emoji] = Math.max(0, (s.r[emoji] || 1) - 1); }
+  else { db.reactions[key] = 1; s.r[emoji] = (s.r[emoji] || 0) + 1; }
+  saveDB();
   res.json(postDTO(p, req.user.id));
 });
 

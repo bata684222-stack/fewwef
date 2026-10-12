@@ -29,6 +29,18 @@ function mimeOf(name) { return mime[path.extname(name).toLowerCase()] || 'applic
 
 function newName(ext) { return Date.now() + '-' + crypto.randomBytes(8).toString('hex') + ext; }
 
+// убираем параметры SSL, если их просят не использовать (внутренние БД без TLS)
+function stripSsl(url) {
+  try {
+    const u = new URL(url);
+    let had = false;
+    for (const k of ['sslmode', 'ssl', 'channel_binding']) {
+      if (u.searchParams.has(k)) { u.searchParams.delete(k); had = true; }
+    }
+    return { url: u.toString(), had };
+  } catch (_) { return { url, had: false }; }
+}
+
 class Store {
   constructor() { this.kind = 'file'; this.pg = null; this.redis = null; this.source = ''; }
 
@@ -81,11 +93,21 @@ class Store {
   // ───────── PostgreSQL ─────────
   async initPG(url) {
     const { Pool } = require('pg');
-    const local = /localhost|127\.0\.0\.1/.test(url);
-    const ssl = (process.env.DATABASE_SSL || '').toLowerCase() === 'false' ? false
-      : (process.env.DATABASE_SSL || '').toLowerCase() === 'true' ? { rejectUnauthorized: false }
-      : (local ? false : { rejectUnauthorized: false });
-    const pool = new Pool({ connectionString: url, ssl, max: 5, idleTimeoutMillis: 30e3 });
+    // SSL по умолчанию НЕ включаем: внутренние базы (RelaxDev и др.) его не поддерживают,
+    // и с ssl:{rejectUnauthorized:false} соединение падает с «server does not support SSL».
+    const s = stripSsl(url);
+    const sslEnv = (process.env.DATABASE_SSL || '').toLowerCase();
+    const opts = {
+      connectionString: s.url,
+      max: Number(process.env.DATABASE_POOL || 5),
+      idleTimeoutMillis: 20e3,
+      connectionTimeoutMillis: 10e3
+    };
+    if (sslEnv === 'true') opts.ssl = { rejectUnauthorized: false };
+    else if (sslEnv === 'false' || s.had) opts.ssl = false; // явно попросили без TLS
+    // иначе ssl не задаём — pg сам разберёт sslmode из строки подключения
+    if (process.env.DATABASE_PGBOUNCER === 'true') opts.pgbouncer = true;
+    const pool = new Pool(opts);
     const probe = await pool.connect(); probe.release();
     await pool.query(`CREATE TABLE IF NOT EXISTS ag_state (
       id text PRIMARY KEY, data jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())`);

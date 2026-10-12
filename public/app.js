@@ -60,7 +60,7 @@ const ERR = {
   file_too_big: 'Файл слишком большой', only_images: 'Нужна картинка png/jpg/webp/gif', only_json: 'Нужен файл .json',
   bad_json: 'Файл — не корректный JSON', short_title: 'Название слишком короткое', not_found: 'Не найдено',
   not_yours: 'Это не твоё', empty: 'Пусто', server_error: 'Ошибка сервера, попробуй позже', bad_upload: 'Ошибка загрузки файла',
-  too_big: 'Слишком большой запрос', bad_request: 'Так нельзя'
+  too_big: 'Слишком большой запрос', bad_request: 'Так нельзя', bad_reaction: 'Такой реакции нет'
 };
 const errText = e => ERR[e.message] || (/^http_/.test(e.message) ? 'Ошибка сети (' + e.message.slice(5) + ')' : 'Нет связи с сервером');
 
@@ -228,6 +228,7 @@ function card(p) {
       '<span class="spacer"></span><span class="score"></span>' +
       (own ? '<button class="icon-btn del" type="button" title="Удалить пост" aria-label="Удалить пост">' + ICON.trash + '</button>' : '') +
     '</div>' +
+    '<div class="react" aria-label="Реакции"></div>' +
     '<div class="comments" hidden><div class="clist"></div>' +
       '<div class="cform"><input placeholder="Написать комментарий…" maxlength="500" aria-label="Комментарий" enterkeyhint="send">' +
       '<button class="icon-btn primary send" type="button" title="Отправить" aria-label="Отправить">' + ICON.send + '</button></div></div>';
@@ -237,6 +238,9 @@ function card(p) {
   paint(d, p);
 
   const likeB = d.querySelector('.like'), disB = d.querySelector('.dis'), cmtB = d.querySelector('.cmtb');
+  const reactBox = d.querySelector('.react');
+  reactBox.appendChild(rAdd(REACTS, 'добавить реакцию', () => showReacts(d, p)));
+  paintReact(d, p);
   const box = d.querySelector('.comments'), inp = box.querySelector('input'), sendB = box.querySelector('.send');
   likeB.onclick = () => { pop(likeB); vote(p, d, p.myVote === 1 ? 0 : 1); };
   disB.onclick = () => { pop(disB); vote(p, d, p.myVote === -1 ? 0 : -1); };
@@ -251,6 +255,66 @@ function card(p) {
   return d;
 }
 function pop(b) { b.classList.add('pop'); setTimeout(() => b.classList.remove('pop'), 320); }
+
+// ───────── реакции ─────────
+const REACTS = ['🔥', '👏', '🎯', '🧠', '💀'];
+function rAdd(emojis, title, onclick) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 're'; b.title = title;
+  b.setAttribute('aria-label', title);
+  b.textContent = emojis.join(' ');
+  b.onclick = onclick;
+  return b;
+}
+function paintReact(d, p) {
+  const box = d.querySelector('.react');
+  box.querySelectorAll('.re:not(.add)').forEach(n => n.remove());
+  const counts = p.reactions || {}, mine = p.myReactions || [];
+  const list = REACTS.filter(e => counts[e] || mine.includes(e));
+  const add = box.querySelector('.re.add');
+  for (const e of list) {
+    const b = rAdd([e], e + ' — ' + counts[e], () => react(d, p, e));
+    if (counts[e]) b.appendChild(Object.assign(document.createElement('i'), { textContent: counts[e] }));
+    if (mine.includes(e)) b.classList.add('on');
+    box.insertBefore(b, add);
+  }
+}
+function showReacts(d, p) {
+  let pop_ = d.querySelector('.reactpop');
+  if (pop_) { pop_.remove(); return; }
+  pop_ = document.createElement('div');
+  pop_.className = 'reactpop';
+  for (const e of REACTS) {
+    const b = rAdd([e], e, () => { react(d, p, e); pop_.remove(); });
+    if ((p.myReactions || []).includes(e)) b.classList.add('on');
+    pop_.appendChild(b);
+  }
+  d.querySelector('.react').appendChild(pop_);
+  setTimeout(() => {
+    const off = ev => { if (!pop_.contains(ev.target)) { pop_.remove(); document.removeEventListener('click', off); } };
+    setTimeout(() => document.addEventListener('click', off), 0);
+  }, 0);
+}
+async function react(d, p, emoji) { // мгновенно, с откатом при ошибке
+  const snap = JSON.parse(JSON.stringify({ reactions: p.reactions || {}, myReactions: p.myReactions || [] }));
+  const mine = new Set(p.myReactions || []);
+  const had = mine.has(emoji);
+  if (had) mine.delete(emoji); else mine.add(emoji);
+  p.myReactions = [...mine];
+  p.reactions = Object.assign({}, p.reactions);
+  p.reactions[emoji] = Math.max(0, (p.reactions[emoji] || 0) + (had ? -1 : 1));
+  if (!p.reactions[emoji]) delete p.reactions[emoji];
+  const b = d.querySelector('.react .re.add');
+  if (b) pop(b);
+  paintReact(d, p);
+  try {
+    const r = await api('/api/posts/' + p.id + '/react', { method: 'POST', body: JSON.stringify({ emoji }) });
+    p.reactions = r.reactions; p.myReactions = r.myReactions; paintReact(d, p);
+  } catch (e) {
+    p.reactions = snap.reactions; p.myReactions = snap.myReactions;
+    paintReact(d, p); toast(errText(e), 'err');
+  }
+}
 function paint(d, p) {
   const L = d.querySelector('.like'), D = d.querySelector('.dis'), C = d.querySelector('.cmtb'), S = d.querySelector('.score');
   L.classList.toggle('on', p.myVote === 1); L.setAttribute('aria-pressed', p.myVote === 1);
