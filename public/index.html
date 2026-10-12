@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WorkshopAG — лента</title>
+<link rel="icon" type="image/png" href="AG.png">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- МЕНЮШКА ВХОДА ПЕРВЫМ ЭКРАНОМ -->
+<div id="gate">
+  <div class="menu-box">
+    <img class="logo" src="AG.png" alt="AG">
+    <div class="menu-title">WORKSHOP AG</div>
+    <div class="menu-sub">реальные люди · фото · json · текст</div>
+    <div class="tabs2">
+      <button id="g-reg" class="on">РЕГИСТРАЦИЯ</button>
+      <button id="g-log">ВОЙТИ</button>
+    </div>
+    <input id="g-name" placeholder="Ник (от 2 букв)" maxlength="20" autocomplete="username">
+    <input id="g-pass" type="password" placeholder="Пароль (от 4 символов)" maxlength="40" autocomplete="current-password">
+    <button id="g-go" class="primary">ПРОДОЛЖИТЬ →</button>
+    <div class="hint" id="g-err"></div>
+  </div>
+</div>
+
+<!-- ПРИЛОЖЕНИЕ -->
+<div id="app" style="display:none">
+  <header class="topmini">
+    <img src="AG.png" alt="AG"><b>WORKSHOP AG</b>
+    <span class="sp"></span>
+    <input id="q" placeholder="Поиск…" maxlength="40">
+    <select id="sort"><option value="new">Новые</option><option value="top">Топ</option></select>
+  </header>
+
+  <main id="page-feed" class="page">
+    <div class="feedtabs">
+      <button id="tab-all" class="on">ВСЕ</button>
+      <button id="tab-proj">СНАРЯДЫ</button>
+      <button id="tab-build">ПОСТРОЙКИ</button>
+    </div>
+    <div id="feed"></div>
+    <div class="hint center" id="empty" style="display:none">Пока пусто — стань первым! Жми ＋</div>
+  </main>
+
+  <main id="page-add" class="page" style="display:none">
+    <h3>Новый пост — текст + фото + JSON</h3>
+    <div class="form">
+      <div class="row2">
+        <input id="title" placeholder="Название…" maxlength="80">
+        <select id="kind"><option value="proj">Снаряд</option><option value="build">Постройка</option></select>
+      </div>
+      <textarea id="body" rows="3" placeholder="Текст: материалы, скорость…" maxlength="2000"></textarea>
+      <label class="file">📷 Фото (png/jpg/webp, до 5MB)<input id="photo" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+      <img id="preview" style="display:none;max-width:100%;border-radius:8px;border:1px solid var(--line)">
+      <label class="file">🧩 JSON-файл (чертёж для игры, до 5MB)<input id="jsonfile" type="file" accept=".json,application/json"></label>
+      <div class="hint" id="jname"></div>
+      <button id="publish" class="primary">ОПУБЛИКОВАТЬ</button>
+    </div>
+  </main>
+
+  <main id="page-me" class="page" style="display:none">
+    <h3>Мой аккаунт</h3>
+    <div class="form">
+      <div class="mehead"><img id="myava" src="AG.png" alt=""><div><b id="myname">—</b><div class="hint" id="mystats"></div></div></div>
+      <div id="mylist"></div>
+    </div>
+  </main>
+
+  <main id="page-set" class="page" style="display:none">
+    <h3>Настройки</h3>
+    <div class="form">
+      <label>Ник<input id="s-name" maxlength="20"></label>
+      <label>Новый пароль (пусто = не менять)<input id="s-pass" type="password" maxlength="40"></label>
+      <label class="file">Аватар<input id="s-ava" type="file" accept="image/png,image/jpeg,image/webp"></label>
+      <button id="s-save" class="primary">СОХРАНИТЬ</button>
+      <div class="row2">
+        <button id="logout">Выйти</button>
+        <button id="delacc" style="color:var(--bad)">Удалить акк</button>
+      </div>
+      <div class="hint" id="health"></div>
+    </div>
+  </main>
+
+  <nav id="nav">
+    <button id="nav-feed" class="on">▶ Лента</button>
+    <button id="nav-add">＋</button>
+    <button id="nav-me">👤 Акк</button>
+    <button id="nav-set">⚙ Настройки</button>
+  </nav>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
