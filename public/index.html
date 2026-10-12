@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="WorkshopAG — лента снарядов и построек от реальных игроков: фото, чертежи в JSON, обсуждения.">
-<meta name="theme-color" content="#0b0d10">
+<meta name="theme-color" content="#050506">
 <title>WorkshopAG — лента</title>
 <link rel="icon" type="image/png" href="AG.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -15,88 +15,159 @@
 <body>
 <noscript><p style="padding:16px;text-align:center">Для работы WorkshopAG нужен JavaScript.</p></noscript>
 
-<!-- МЕНЮШКА ВХОДА ПЕРВЫМ ЭКРАНОМ -->
+<!-- ВХОД -->
 <div id="gate">
   <div class="menu-box" role="dialog" aria-labelledby="gate-title">
-    <img class="logo" src="AG.png" alt="AG" width="96" height="96" decoding="async">
+    <img class="logo" src="AG.png" alt="AG" width="120" height="120" decoding="async">
     <div class="menu-title" id="gate-title">WORKSHOP AG</div>
     <div class="menu-sub">реальные люди · фото · json · текст</div>
-    <div class="tabs2" role="tablist">
-      <button id="g-reg" class="on" type="button" role="tab" aria-selected="true">РЕГИСТРАЦИЯ</button>
-      <button id="g-log" type="button" role="tab" aria-selected="false">ВОЙТИ</button>
+    <div class="seg" role="tablist">
+      <button id="g-reg" class="on" type="button" role="tab" aria-selected="true">Регистрация</button>
+      <button id="g-log" type="button" role="tab" aria-selected="false">Вход</button>
     </div>
-    <input id="g-name" placeholder="Ник (от 2 букв)" aria-label="Ник" maxlength="20" minlength="2" autocomplete="username" autocapitalize="none" spellcheck="false" enterkeyhint="next">
-    <input id="g-pass" type="password" placeholder="Пароль (от 4 символов)" aria-label="Пароль" maxlength="40" minlength="4" autocomplete="current-password" enterkeyhint="go">
-    <button id="g-go" class="primary" type="button">ПРОДОЛЖИТЬ →</button>
-    <div class="hint" id="g-err" role="alert" aria-live="assertive"></div>
+    <input id="g-name" placeholder="Ник (от 2 символов)" aria-label="Ник" maxlength="20" autocomplete="username" autocapitalize="none" spellcheck="false" enterkeyhint="next">
+    <div class="pw">
+      <input id="g-pass" type="password" placeholder="Пароль (от 4 символов)" aria-label="Пароль" maxlength="40" autocomplete="new-password" enterkeyhint="go">
+      <button id="g-eye" class="eye" type="button" aria-label="Показать пароль" data-ic="eye"></button>
+    </div>
+    <button id="g-go" class="primary wide" type="button">Создать аккаунт →</button>
+    <div class="gate-err" id="g-err" role="alert" aria-live="assertive"></div>
   </div>
 </div>
 
 <!-- ПРИЛОЖЕНИЕ -->
 <div id="app" style="display:none">
-  <header class="topmini">
-    <img src="AG.png" alt="AG" width="28" height="28" decoding="async"><b>WORKSHOP AG</b>
-    <span class="sp"></span>
-    <input id="q" type="search" placeholder="Поиск…" aria-label="Поиск по постам" maxlength="40" autocomplete="off" enterkeyhint="search">
-    <select id="sort" aria-label="Сортировка"><option value="new">Новые</option><option value="top">Топ</option></select>
+  <header class="topbar">
+    <button class="brand" id="brand" type="button" aria-label="Наверх"><img src="AG.png" alt="" width="32" height="32" decoding="async"><b>WORKSHOP AG</b></button>
+    <div class="search">
+      <span class="ico" data-ic="search"></span>
+      <input id="q" type="search" placeholder="Поиск по постам…" aria-label="Поиск по постам" maxlength="40" autocomplete="off" enterkeyhint="search">
+      <button id="q-clear" class="q-clear" type="button" aria-label="Очистить поиск" data-ic="x" hidden></button>
+    </div>
   </header>
 
+  <!-- ЛЕНТА -->
   <main id="page-feed" class="page">
-    <div class="feedtabs" role="tablist">
-      <button id="tab-all" class="on" type="button" role="tab">ВСЕ</button>
-      <button id="tab-proj" type="button" role="tab">СНАРЯДЫ</button>
-      <button id="tab-build" type="button" role="tab">ПОСТРОЙКИ</button>
+    <div class="seg" role="tablist" aria-label="Тип постов">
+      <button id="tab-all" class="on" type="button" role="tab">Все</button>
+      <button id="tab-proj" type="button" role="tab">Снаряды</button>
+      <button id="tab-build" type="button" role="tab">Постройки</button>
+    </div>
+    <div class="subbar">
+      <span class="hint" id="count"></span>
+      <div class="seg seg-sm" role="tablist" aria-label="Сортировка">
+        <button id="sort-new" class="on" type="button" role="tab">Новые</button>
+        <button id="sort-top" type="button" role="tab">Топ</button>
+      </div>
     </div>
     <div id="feed" aria-live="polite"></div>
-    <div class="hint center" id="empty" style="display:none">Пока пусто — стань первым! Жми ＋</div>
+    <div class="empty" id="empty" hidden></div>
+    <div id="sentinel"><div class="spinner" id="more" hidden></div></div>
   </main>
 
+  <!-- НОВЫЙ ПОСТ -->
   <main id="page-add" class="page" style="display:none">
-    <h3>Новый пост — текст + фото + JSON</h3>
+    <h3>Новый пост</h3>
     <div class="form">
-      <div class="row2">
-        <input id="title" placeholder="Название…" aria-label="Название" maxlength="80" minlength="2" autocomplete="off">
-        <select id="kind" aria-label="Тип поста"><option value="proj">Снаряд</option><option value="build">Постройка</option></select>
+      <div class="seg" role="tablist" aria-label="Тип поста">
+        <button id="kind-proj" class="on" type="button" role="tab">Снаряд</button>
+        <button id="kind-build" type="button" role="tab">Постройка</button>
       </div>
-      <textarea id="body" rows="3" placeholder="Текст: материалы, скорость…" aria-label="Описание" maxlength="2000"></textarea>
-      <label class="file">Фото (png/jpg/webp/gif, до 5MB)<input id="photo" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
-      <img id="preview" alt="Предпросмотр фото" decoding="async" style="display:none;max-width:100%;border-radius:8px;border:1px solid var(--line)">
-      <label class="file">JSON-файл (чертёж для игры, до 2MB)<input id="jsonfile" type="file" accept=".json,application/json"></label>
-      <div class="hint" id="jname"></div>
-      <button id="publish" class="primary" type="button">ОПУБЛИКОВАТЬ</button>
+
+      <label class="fld">Название
+        <input id="title" placeholder="Например: Ракета «Стриж»" maxlength="80" autocomplete="off">
+        <span class="count" id="title-n">0/80</span>
+      </label>
+
+      <label class="fld">Описание
+        <textarea id="body" rows="4" placeholder="Материалы, скорость, как собирать…" maxlength="2000"></textarea>
+        <span class="count" id="body-n">0/2000</span>
+      </label>
+
+      <div class="fld">Фото
+        <label class="drop" id="drop-photo">
+          <input id="photo" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+          <span class="drop-in"><span class="ico" data-ic="image"></span><b>Выбрать или перетащить фото</b><small>png, jpg, webp, gif · до 5 MB</small></span>
+        </label>
+        <div class="preview" id="preview-wrap" hidden>
+          <img id="preview" alt="Предпросмотр фото" decoding="async">
+          <button id="photo-clear" class="icon-btn" type="button" aria-label="Убрать фото" data-ic="x"></button>
+        </div>
+      </div>
+
+      <div class="fld">JSON-чертёж <small class="opt">для игры</small>
+        <label class="drop" id="drop-json">
+          <input id="jsonfile" type="file" accept=".json,application/json">
+          <span class="drop-in"><span class="ico" data-ic="file"></span><b>Выбрать или перетащить .json</b><small>до 2 MB</small></span>
+        </label>
+        <div class="chipfile" id="jchip" hidden>
+          <span class="ico" data-ic="file"></span><span id="jname"></span>
+          <button id="json-clear" class="icon-btn" type="button" aria-label="Убрать файл" data-ic="x"></button>
+        </div>
+      </div>
+
+      <button id="publish" class="primary wide" type="button" data-ic="send">Опубликовать</button>
     </div>
   </main>
 
+  <!-- ПРОФИЛЬ -->
   <main id="page-me" class="page" style="display:none">
-    <h3>Мой аккаунт</h3>
-    <div class="form">
-      <div class="mehead"><img id="myava" src="AG.png" alt="Аватар" width="64" height="64" decoding="async"><div><b id="myname">—</b><div class="hint" id="mystats"></div></div></div>
-      <div id="mylist"></div>
+    <div class="profile">
+      <img id="myava" src="AG.png" alt="Аватар" width="72" height="72" decoding="async">
+      <div class="pinfo">
+        <b id="myname">—</b>
+        <div class="hint" id="mystats"></div>
+      </div>
+      <button id="me-edit" class="small" type="button" data-ic="edit">Изменить</button>
     </div>
+    <h3>Мои посты</h3>
+    <div id="mylist"></div>
   </main>
 
+  <!-- НАСТРОЙКИ -->
   <main id="page-set" class="page" style="display:none">
-    <h3>Настройки</h3>
+    <h3>Профиль</h3>
     <div class="form">
-      <label>Ник<input id="s-name" maxlength="20" minlength="2" autocomplete="username" spellcheck="false"></label>
-      <label>Новый пароль (пусто = не менять)<input id="s-pass" type="password" maxlength="40" minlength="4" autocomplete="new-password"></label>
-      <label class="file">Аватар<input id="s-ava" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
-      <button id="s-save" class="primary" type="button">СОХРАНИТЬ</button>
-      <div class="row2">
-        <button id="logout" type="button">Выйти</button>
-        <button id="delacc" type="button" style="color:var(--bad)">Удалить акк</button>
+      <div class="ava-edit">
+        <img id="s-prev" src="AG.png" alt="Аватар" width="72" height="72" decoding="async">
+        <div>
+          <label class="btn small" for="s-ava"><span class="ico" data-ic="image"></span>Сменить фото</label>
+          <input id="s-ava" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+          <div class="hint">png, jpg, webp · до 5 MB</div>
+        </div>
       </div>
-      <div class="hint" id="health" aria-live="polite"></div>
+      <label class="fld">Ник
+        <input id="s-name" maxlength="20" autocomplete="username" spellcheck="false">
+      </label>
+      <label class="fld">Новый пароль
+        <div class="pw">
+          <input id="s-pass" type="password" maxlength="40" autocomplete="new-password" placeholder="Оставь пустым, чтобы не менять">
+          <button id="s-eye" class="eye" type="button" aria-label="Показать пароль" data-ic="eye"></button>
+        </div>
+      </label>
+      <button id="s-save" class="primary wide" type="button" data-ic="check">Сохранить</button>
     </div>
+
+    <h3>Аккаунт</h3>
+    <div class="form">
+      <button id="logout" class="wide" type="button" data-ic="logout">Выйти</button>
+      <button id="delacc" class="danger wide" type="button" data-ic="trash">Удалить аккаунт</button>
+    </div>
+    <div class="hint center" id="health" aria-live="polite"></div>
   </main>
 
   <nav id="nav" aria-label="Основная навигация">
-    <button id="nav-feed" class="on" type="button" aria-label="Лента"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span>Лента</span></button>
-    <button id="nav-add" type="button" title="Новый пост" aria-label="Новый пост"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
-    <button id="nav-me" type="button" aria-label="Мой аккаунт"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Акк</span></button>
-    <button id="nav-set" type="button" aria-label="Настройки"><svg class="ic" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Настройки</span></button>
+    <button id="nav-feed" class="on" type="button"><span class="ico" data-ic="home"></span><span>Лента</span></button>
+    <button id="nav-add" type="button" title="Новый пост" aria-label="Новый пост"><span class="ico" data-ic="plus"></span></button>
+    <button id="nav-me" type="button"><span class="ico" data-ic="user"></span><span>Профиль</span></button>
+    <button id="nav-set" type="button"><span class="ico" data-ic="gear"></span><span>Настройки</span></button>
   </nav>
+
+  <button id="totop" class="icon-btn" type="button" aria-label="Наверх" data-ic="up" hidden></button>
 </div>
+
+<div id="lightbox" hidden><button class="icon-btn" id="lb-close" type="button" aria-label="Закрыть" data-ic="x"></button><img id="lb-img" alt=""></div>
+<div id="toasts" aria-live="polite"></div>
 <script src="app.js" defer></script>
 </body>
 </html>
