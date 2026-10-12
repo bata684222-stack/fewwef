@@ -13,7 +13,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
-const { store, DB_FILE, UP_DIR, mimeOf } = require('./store');
+const { store, DB_FILE, UP_DIR, DATA_DIR, MOUNT, mimeOf } = require('./store');
 
 // ───────────────────────── конфиг ─────────────────────────
 const PROD = process.env.NODE_ENV === 'production';
@@ -461,7 +461,11 @@ app.delete('/api/comments/:id', authNeed, writeLimiter, (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, posts: db.posts.length, users: db.users.length, uptime: Math.round(process.uptime()) }));
+app.get('/api/health', (_req, res) => res.json({
+  ok: true, posts: db.posts.length, users: db.users.length,
+  uptime: Math.round(process.uptime()),
+  storage: { kind: store.kind, source: store.source, mount: MOUNT || null, dataDir: DATA_DIR }
+}));
 
 // ───────────────────────── форумы ─────────────────────────
 const FORUM_CATS = [
@@ -633,8 +637,8 @@ async function boot() {
   await store.save(db); // гарантируем, что данные есть в целевом хранилище
   server = app.listen(PORT, () => {
     console.log('WorkshopAG v5 on :' + PORT);
-    console.log('хранилище: ' + store.kind +
-      (store.kind === 'file' ? '  ⚠ данные НЕ переживут деплой — задай DATABASE_URL или REDIS_URL' : '  ✓ переживает деплой'));
+    console.log('хранилище: ' + store.kind + ' (' + store.source + ')' +
+      (store.kind === 'file' && !MOUNT ? '  ⚠ ДАННЫЕ НЕ ПЕРЕЖИВУТ ДЕПЛОЙ — нужна БД или постоянный том' : '  ✓ переживает деплой'));
   });
   server.requestTimeout = 30e3;
   server.headersTimeout = 15e3;
