@@ -22,6 +22,7 @@ npm start
 - Просмотры: глазок со счётчиком под каждым постом, счётчик просмотров в профиле
 - Группы: вкладка «Группы» в разделе форумов — создать, вступить, чат, кик, удалить
 - Звонки: голос и видео 1-на-1 (WebRTC P2P) — кнопки в профиле и в шапке диалога, входящий звонок с мелодией; в настройках тумблер «Принимать звонки»
+- Групповые звонки: кнопка «Позвонить» в группе собирает комнату (до 6), остальные входят баннером «Войти в звонок», каждый слышит/видит каждого
 
 ## Роли и модерация
 
@@ -85,6 +86,7 @@ npm start
 - Бот: `POST /api/bot {text}` → `{ reply }`
 - Группы: `GET /api/groups?mine=&q=`, `POST /api/groups {name,desc}`, `GET /api/groups/:id` (участники), `POST /api/groups/:id/{join,leave}`, `POST /api/groups/:id/kick {userId}`, `DELETE /api/groups/:id`, `GET/POST /api/groups/:id/msgs`, `DELETE /api/groups/:gid/msgs/:mid`
 - Звонки: `POST /api/calls {to,kind,offer}`, `GET /api/calls/incoming`, `GET /api/calls/:id/state`, `POST /api/calls/:id/{answer,ice,reject,hangup}`. Запрет звонков: `PATCH /api/me {callsOff:true}`. Медиа идёт напрямую между игроками, нужен белый IP хотя бы с одной стороны (без TURN за строгим NAT может не соединить)
+- Групповые звонки: `POST /api/groups/:id/call {kind}`, `GET /api/groups/:id/call`, `POST /api/groups/:id/call/{offer,answer,ice} {to,…}`, `POST /api/groups/:id/call/{leave,end}`. Mesh: новичок делает offer каждому внутри, те отвечают
 
 ## Деплой (Node 18+, `npm install`, старт `npm start`)
 

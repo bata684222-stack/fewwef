@@ -53,7 +53,7 @@ const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch
 // ───────────────────────── база ─────────────────────────
 // Формат: { users:[], posts:[], comments:[], votes:{ "postId:userId": 1|-1 },
 //   threads:[], treplies:[], dms:[] }
-function emptyDB() { return { users: [], posts: [], comments: [], votes: {}, reactions: {}, follows: {}, broadcasts: [], threads: [], treplies: [], dms: [], groups: [], gmsgs: [], calls: [] }; }
+function emptyDB() { return { users: [], posts: [], comments: [], votes: {}, reactions: {}, follows: {}, broadcasts: [], threads: [], treplies: [], dms: [], groups: [], gmsgs: [], calls: [], gcalls: [] }; }
 
 function parseDB(raw) {
   const db = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -62,7 +62,7 @@ function parseDB(raw) {
   db.reactions = db.reactions || {};
   db.follows = db.follows || {};
   db.broadcasts = db.broadcasts || [];
-  db.groups = db.groups || []; db.gmsgs = db.gmsgs || []; db.calls = db.calls || [];
+  db.groups = db.groups || []; db.gmsgs = db.gmsgs || []; db.calls = db.calls || []; db.gcalls = db.gcalls || [];
   if (Array.isArray(db.votes)) { // миграция со старого формата (массив)
     const m = {};
     for (const v of db.votes) m[v.postId + ':' + v.userId] = v.value;
@@ -461,6 +461,8 @@ function dropUser(u) {
   for (const g of db.groups) groupsById.delete(g.id);
   for (const id of myGroups) groupsById.delete(id);
   db.calls = db.calls.filter(c => c.from !== u.id && c.to !== u.id);
+  for (const r of db.gcalls) delete r.peers[u.id];
+  db.gcalls = db.gcalls.filter(r => Object.keys(r.peers).length);
   db.users = db.users.filter(x => x.id !== u.id);
   usersById.delete(u.id); usersByName.delete(u.name.toLowerCase());
   rebuildIndexes(); saveDB();
@@ -1045,6 +1047,7 @@ app.delete('/api/groups/:id', authNeed, writeLimiter, (req, res) => {
   if (g.ownerId !== req.user.id && !isAdmin(req.user)) fail(403, 'not_admin');
   db.groups = db.groups.filter(x => x.id !== g.id);
   db.gmsgs = db.gmsgs.filter(m => m.groupId !== g.id);
+  db.gcalls = db.gcalls.filter(r => r.groupId !== g.id);
   groupsById.delete(g.id);
   saveDB();
   res.json({ ok: true });
@@ -1105,6 +1108,11 @@ app.post('/api/calls', authNeed, writeLimiter, (req, res) => {
   if (peer.callsOff) fail(403, 'calls_off'); // игрок запретил звонки
   if (activeCallOf(req.user.id)) fail(409, 'busy_self');
   if (activeCallOf(peer.id)) fail(409, 'busy_peer');
+  for (const r of db.gcalls) {
+    if (r.status !== 'open') continue;
+    if (r.peers[req.user.id]) fail(409, 'busy_self');
+    if (r.peers[peer.id]) fail(409, 'busy_peer');
+  }
   const kind = req.body?.kind === 'video' ? 'video' : 'audio';
   const offer = req.body?.offer;
   if (!offer || typeof offer.sdp !== 'string' || offer.sdp.length > 20000) fail(400, 'bad_offer');
@@ -1169,6 +1177,107 @@ app.post('/api/calls/:id/hangup', authNeed, writeLimiter, (req, res) => {
   const c = db.calls.find(x => x.id === req.params.id);
   if (!c || (c.from !== req.user.id && c.to !== req.user.id)) fail(404, 'not_found');
   c.status = 'ended'; c.updatedAt = Date.now();
+  saveDB();
+  res.json({ ok: true });
+});
+
+// ───────────────────────── групповые звонки (комната + mesh-сигнал) ─────────────────────────
+// Как работает: первый вошедший создаёт комнату, остальные подтягиваются.
+// Новичок делает offer каждому, кто уже внутри; те отвечают. ICE — так же парами.
+// Лимит 6 участников. Закрывается, когда вышел последний.
+const GCALL_MAX = 6;
+function openGRoom(gid) { return db.gcalls.find(r => r.groupId === gid && r.status === 'open'); }
+function gRoomDTO(room) {
+  const peers = Object.entries(room.peers || {}).map(([uid, p]) => {
+    const u = usersById.get(uid);
+    return { id: uid, name: u ? u.name : '?', avatar: u ? u.avatar || null : null, joinedAt: p.joinedAt, offers: p.offers, answers: p.answers, ice: p.ice };
+  });
+  return { id: room.id, groupId: room.groupId, kind: room.kind, by: room.by, createdAt: room.createdAt, peers };
+}
+app.post('/api/groups/:id/call', authNeed, writeLimiter, (req, res) => {
+  const g = groupsById.get(req.params.id);
+  if (!g) fail(404, 'not_found');
+  if (!g.members[req.user.id] && !isMod(req.user)) fail(403, 'not_member');
+  if (activeCallOf(req.user.id)) fail(409, 'busy_self');
+  let room = openGRoom(g.id);
+  if (room) {
+    if (room.peers[req.user.id]) fail(409, 'busy_self');
+    if (Object.keys(room.peers).length >= GCALL_MAX) fail(409, 'room_full');
+    const kind = room.kind;
+    room.peers[req.user.id] = { offers: {}, answers: {}, ice: {}, joinedAt: Date.now() };
+    room.updatedAt = Date.now();
+    saveDB();
+    return res.json({ ...gRoomDTO(room), kind, joined: true });
+  }
+  const kind = req.body?.kind === 'video' ? 'video' : 'audio';
+  room = { id: uid(), groupId: g.id, kind, by: req.user.id, status: 'open', peers: { [req.user.id]: { offers: {}, answers: {}, ice: {}, joinedAt: Date.now() } }, createdAt: Date.now(), updatedAt: Date.now() };
+  db.gcalls.push(room); saveDB();
+  res.json({ ...gRoomDTO(room), joined: true });
+});
+app.get('/api/groups/:id/call', authNeed, (req, res) => {
+  const g = groupsById.get(req.params.id);
+  if (!g) fail(404, 'not_found');
+  if (!g.members[req.user.id] && !isMod(req.user)) fail(403, 'not_member');
+  const room = openGRoom(g.id);
+  if (!room) return res.json({ room: null });
+  res.json({ room: gRoomDTO(room), inRoom: !!room.peers[req.user.id] });
+});
+app.post('/api/groups/:id/call/offer', authNeed, writeLimiter, (req, res) => {
+  const room = openGRoom(req.params.id);
+  if (!room || !room.peers[req.user.id]) fail(404, 'not_found');
+  const to = String(req.body?.to || '');
+  if (!room.peers[to] || to === req.user.id) fail(400, 'bad_request');
+  const offer = req.body?.offer;
+  if (!offer || typeof offer.sdp !== 'string' || offer.sdp.length > 20000) fail(400, 'bad_offer');
+  room.peers[req.user.id].offers[to] = { type: 'offer', sdp: String(offer.sdp).slice(0, 20000) };
+  room.updatedAt = Date.now();
+  saveDB();
+  res.json({ ok: true });
+});
+app.post('/api/groups/:id/call/answer', authNeed, writeLimiter, (req, res) => {
+  const room = openGRoom(req.params.id);
+  if (!room || !room.peers[req.user.id]) fail(404, 'not_found');
+  const to = String(req.body?.to || '');
+  if (!room.peers[to] || to === req.user.id) fail(400, 'bad_request');
+  const answer = req.body?.answer;
+  if (!answer || typeof answer.sdp !== 'string' || answer.sdp.length > 20000) fail(400, 'bad_offer');
+  room.peers[req.user.id].answers[to] = { type: 'answer', sdp: String(answer.sdp).slice(0, 20000) };
+  room.updatedAt = Date.now();
+  saveDB();
+  res.json({ ok: true });
+});
+app.post('/api/groups/:id/call/ice', authNeed, writeLimiter, (req, res) => {
+  const room = openGRoom(req.params.id);
+  if (!room || !room.peers[req.user.id]) fail(404, 'not_found');
+  const to = String(req.body?.to || '');
+  if (!room.peers[to] || to === req.user.id) fail(400, 'bad_request');
+  const cand = req.body?.candidate;
+  if (!cand || typeof cand.candidate !== 'string' || cand.candidate.length > 4000) fail(400, 'bad_ice');
+  const arr = room.peers[req.user.id].ice[to] || (room.peers[req.user.id].ice[to] = []);
+  if (arr.length > 100) fail(400, 'too_many');
+  arr.push({ candidate: String(cand.candidate).slice(0, 4000), sdpMid: String(cand.sdpMid || '').slice(0, 64), sdpMLineIndex: Number(cand.sdpMLineIndex) || 0 });
+  room.updatedAt = Date.now();
+  saveDB();
+  res.json({ ok: true });
+});
+app.post('/api/groups/:id/call/leave', authNeed, writeLimiter, (req, res) => {
+  const room = openGRoom(req.params.id);
+  if (!room || !room.peers[req.user.id]) return res.json({ ok: true });
+  delete room.peers[req.user.id];
+  if (!Object.keys(room.peers).length) {
+    room.status = 'closed';
+    db.gcalls = db.gcalls.filter(r => r.id !== room.id);
+  }
+  saveDB();
+  res.json({ ok: true });
+});
+app.post('/api/groups/:id/call/end', authNeed, writeLimiter, (req, res) => {
+  const g = groupsById.get(req.params.id);
+  if (!g) fail(404, 'not_found');
+  const room = openGRoom(g.id);
+  if (!room) return res.json({ ok: true });
+  if (g.ownerId !== req.user.id && !isAdmin(req.user)) fail(403, 'not_admin');
+  db.gcalls = db.gcalls.filter(r => r.id !== room.id);
   saveDB();
   res.json({ ok: true });
 });
