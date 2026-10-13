@@ -10,8 +10,9 @@ const LS = {
 let token = LS.get('wsa_token'), me = null;
 let kind = 'all', sort = 'new', mode = 'register', postKind = 'proj';
 let curPage = null, feedDirty = true;
-let forumCats = [], forumCat = 'all', curThread = null;
+let forumCats = [], forumCat = 'all', curThread = null, forumMode = 'threads';
 let dmPeer = null, dmName = '', dmTimer = null;
+let curGroup = null, gTimer = null, gLast = 0;
 const PAGE = 12;
 const feed = { offset: 0, total: 0, busy: false, done: false, req: 0 };
 
@@ -47,6 +48,12 @@ const ICON = {
   megaphone: IC('<path d="M3 11l15-6v14L3 13z"/><path d="M3 11v2a2 2 0 0 0 2 2h1v3a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-4"/>'),
   back: IC('<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>'),
   bell: IC('<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>'),
+  phone: IC('<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.9.6 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c.9.3 1.9.5 2.8.6a2 2 0 0 1 1.8 2.1z"/>'),
+  phoneOff: IC('<path d="M10.7 13.3a16 16 0 0 1-3.3-3.3l1.5-1.5a2 2 0 0 0 .5-2.1c-.3-.9-.5-1.9-.6-2.8A2 2 0 0 0 6.8 2H4a2 2 0 0 0-2 2.2c.3 2.5 1.2 4.9 2.6 7 .4-.3 2.7-2.5 5.1-4.6M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-3.7-3.3M16 19.9A16 16 0 0 0 22 16.9"/><line x1="2" y1="2" x2="22" y2="22"/>'),
+  video: IC('<path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/>'),
+  mic: IC('<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/>'),
+  micOff: IC('<line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.1 2.1M15 9.3V4a3 3 0 0 0-5.7-1.3"/><path d="M17 16.9A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.1 1.2"/><line x1="12" y1="19" x2="12" y2="23"/>'),
+  usersPlus: IC('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>'),
   plus: IC('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>'),
   user: IC('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'),
   gear: IC('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>')
@@ -71,7 +78,8 @@ const ERR = {
   bad_json: 'Файл — не корректный JSON', short_title: 'Название слишком короткое', not_found: 'Не найдено',
   not_yours: 'Это не твоё', empty: 'Пусто', server_error: 'Ошибка сервера, попробуй позже', bad_upload: 'Ошибка загрузки файла',
   too_big: 'Слишком большой запрос', bad_request: 'Так нельзя', bad_reaction: 'Такой реакции нет',
-  reserved_name: 'Этот ник зарезервирован владельцем', use_register: 'Зарегистрируйся как обычно', last_admin: 'Нельзя: это последний админ', not_admin: 'Нужны права'
+  reserved_name: 'Этот ник зарезервирован владельцем', use_register: 'Зарегистрируйся как обычно', last_admin: 'Нельзя: это последний админ', not_admin: 'Нужны права',
+  calls_off: 'Игрок запретил звонки', busy_self: 'Ты уже в звонке', busy_peer: 'Игрок уже разговаривает', not_member: 'Ты не в группе', owner_cant_leave: 'Владелец не может выйти — удали группу', bad_offer: 'Ошибка соединения', bad_ice: 'Ошибка соединения', too_many: 'Слишком много попыток'
 };
 const errText = e => ERR[e.message] || (/^http_/.test(e.message) ? 'Ошибка сети (' + e.message.slice(5) + ')' : 'Нет связи с сервером');
 
@@ -108,7 +116,8 @@ function showGate() { $('gate').style.display = 'flex'; $('app').style.display =
 function showApp() { $('gate').style.display = 'none'; $('app').style.display = 'flex'; }
 function logout(msg) {
   token = null; me = null; LS.del('wsa_token'); curPage = null; feedDirty = true;
-  stopDmPoll(); dmPeer = null; forumCats = []; forumCat = 'all'; curThread = null;
+  stopDmPoll(); endCallUI(); if (callTimer) { clearInterval(callTimer); callTimer = null; }
+  dmPeer = null; forumCats = []; forumCat = 'all'; curThread = null;
   $('dm-dot').hidden = true;
   $('feed').replaceChildren(); $('mylist').replaceChildren();
   showGate(); if (msg) toast(msg);
@@ -130,7 +139,7 @@ async function gateGo() {
     const r = await api('/api/' + mode, { method: 'POST', body: JSON.stringify({ name, password }) });
     token = r.token; me = r.user; LS.set('wsa_token', token);
     $('g-pass').value = '';
-    showApp(); curPage = null; feedDirty = true; nav('feed'); startDmPoll();
+    showApp(); curPage = null; feedDirty = true; nav('feed'); startDmPoll(); startCallPoll();
   } catch (e) { $('g-err').textContent = errText(e); }
   busy(btn, false);
 }
@@ -145,7 +154,7 @@ function bindEye(btnId, inputId) {
 }
 
 // ───────── навигация ─────────
-const PAGES = [['nav-feed', 'feed'], ['nav-forum', 'forum'], ['nav-add', 'add'], ['nav-dm', 'dm'], ['nav-me', 'me'], ['nav-set', 'set'], ['nav-user', 'user'], ['nav-admin', 'admin']];
+const PAGES = [['nav-feed', 'feed'], ['nav-forum', 'forum'], ['nav-add', 'add'], ['nav-dm', 'dm'], ['nav-me', 'me'], ['nav-set', 'set'], ['nav-user', 'user'], ['nav-admin', 'admin'], ['nav-group', 'group']];
 function nav(p) {
   if (p === 'feed' && curPage === 'feed') { window.scrollTo({ top: 0, behavior: 'smooth' }); load(); return; }
   curPage = p;
@@ -239,6 +248,7 @@ function card(p) {
       '<button class="chip like" type="button" aria-label="Нравится">' + ICON.like + '<span></span></button>' +
       '<button class="chip dis" type="button" aria-label="Не нравится">' + ICON.dislike + '<span></span></button>' +
       '<button class="chip cmtb" type="button" aria-label="Комментарии">' + ICON.cmt + '<span></span></button>' +
+      '<span class="views" title="Просмотры">' + ICON.eye + '<span>' + (p.views || 0) + '</span></span>' +
       '<span class="spacer"></span><span class="score"></span>' +
       (canDel ? '<button class="icon-btn del" type="button" title="' + (own ? 'Удалить пост' : 'Удалить как модератор') + '" aria-label="Удалить пост">' + ICON.trash + '</button>' : '') +
     '</div>' +
@@ -266,9 +276,30 @@ function card(p) {
   inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sendComment(p, d, inp, sendB); } });
   const del = d.querySelector('.del');
   if (del) del.onclick = () => deletePost(p, d);
+  viewObs.observe(d);
   return d;
 }
 function pop(b) { b.classList.add('pop'); setTimeout(() => b.classList.remove('pop'), 320); }
+
+// ───────── просмотры постов: один раз за сессию, когда карточка реально видна ─────────
+const seenViews = (() => { try { return new Set(JSON.parse(sessionStorage.getItem('wsa_seen') || '[]')); } catch (_) { return new Set(); } })();
+const viewObs = new IntersectionObserver(es => {
+  for (const e of es) {
+    if (!e.isIntersecting) continue;
+    const id = e.target.dataset.id;
+    viewObs.unobserve(e.target);
+    if (!id || seenViews.has(id)) continue;
+    seenViews.add(id);
+    try { sessionStorage.setItem('wsa_seen', JSON.stringify([...seenViews].slice(-500))); } catch (_) {}
+    api('/api/posts/' + id + '/view', { method: 'POST' }).then(
+      r => {
+        const s = e.target.querySelector('.views span');
+        if (s) s.textContent = r.views;
+      },
+      () => { seenViews.delete(id); }
+    );
+  }
+}, { rootMargin: '0px 0px -20% 0px', threshold: 0.35 });
 
 // ───────── реакции ─────────
 const REACTS = ['🔥', '👏', '🎯', '🧠', '💀'];
@@ -504,6 +535,133 @@ async function sendReply() {
   busy(btn, false);
 }
 
+// ───────── группы ─────────
+function fgMode(m) {
+  forumMode = m;
+  $('fg-threads').classList.toggle('on', m === 'threads');
+  $('fg-groups').classList.toggle('on', m === 'groups');
+  $('forum-topics-view').hidden = m !== 'threads';
+  $('forum-groups-view').hidden = m !== 'groups';
+  if (m === 'groups') loadGroups();
+}
+function groupRow(g) {
+  const d = document.createElement('div'); d.className = 'trow';
+  d.innerHTML = '<b>' + esc(g.name) + '</b>' +
+    (g.desc ? '<div class="tbody">' + esc(g.desc) + '</div>' : '') +
+    '<div class="tmeta"><span>👥 ' + g.members + '</span><span>' + esc(g.owner) + ' · ' + ago(g.createdAt) + '</span>' +
+    (g.isMember ? '<span class="rc">ты внутри</span>' : '') + '</div>';
+  d.onclick = () => openGroup(g.id);
+  return d;
+}
+async function loadGroups() {
+  const mine = $('groups-mine'), all = $('groups-all');
+  mine.replaceChildren(); all.replaceChildren(); $('groups-empty').hidden = true;
+  try {
+    const [my, list] = await Promise.all([
+      api('/api/groups?mine=1'),
+      api('/api/groups?' + new URLSearchParams({ q: $('gr-q').value.trim() }))
+    ]);
+    if (!my.length && !list.length) {
+      const e = $('groups-empty');
+      e.innerHTML = ICON.users + '<b>Групп пока нет</b><span>Создай первую выше</span>';
+      e.hidden = false; return;
+    }
+    mine.innerHTML = my.length ? '' : '<div class="hint">Ты нигде не состоишь</div>';
+    for (const g of my) mine.appendChild(groupRow(g));
+    for (const g of list) { if (!my.find(x => x.id === g.id)) all.appendChild(groupRow(g)); }
+  } catch (e) { toast(errText(e), 'err'); }
+}
+async function newGroup() {
+  const name = $('gr-name').value.trim(), desc = $('gr-desc').value.trim();
+  if (name.length < 2) { toast('Дай группе название', 'err'); $('gr-name').focus(); return; }
+  const btn = $('gr-add'); busy(btn, true, 'Создаю…');
+  try {
+    const g = await api('/api/groups', { method: 'POST', body: JSON.stringify({ name, desc }) });
+    $('gr-name').value = ''; $('gr-desc').value = '';
+    loadGroups(); openGroup(g.id); toast('Группа создана', 'ok');
+  } catch (e) { toast(errText(e), 'err'); }
+  busy(btn, false);
+}
+async function openGroup(id) {
+  stopGroupPoll();
+  try {
+    const g = await api('/api/groups/' + id);
+    curGroup = g; gLast = 0;
+    const v = $('group-view');
+    const owner = me && g.ownerId === me.id, admin = canAdmin();
+    v.innerHTML = '<div class="card"><div class="cbody"><h4 class="ctitle">' + esc(g.name) + '</h4>' +
+      (g.desc ? '<div class="ctext">' + esc(g.desc) + '</div>' : '') + '</div>' +
+      '<div class="actions"><span class="hint">👥 ' + g.members.length + ' · создал ' + esc(g.owner) + '</span><span class="spacer"></span>' +
+      (!g.isMember ? '<button class="small primary" id="gr-join" type="button">Вступить</button>' : (g.ownerId !== me.id ? '<button class="small" id="gr-leave" type="button">Выйти</button>' : '')) +
+      ((owner || isAdminU()) ? '<button class="icon-btn del" id="gr-del" type="button" title="Удалить группу">' + ICON.trash + '</button>' : '') +
+      '</div><div class="clist" id="gr-members" style="padding:0 14px 12px"></div></div>';
+    const ml = v.querySelector('#gr-members');
+    for (const m of g.members) {
+      const row = document.createElement('div');
+      row.className = 'convo'; row.style.cursor = m.id === me.id ? 'default' : 'pointer';
+      row.innerHTML = '<img src="' + (m.avatar ? esc(url(m.avatar)) : 'AG.png') + '" alt="" loading="lazy"><div class="cinfo"><b>' + nameLink(m.name, m.id, m.badge) + '</b><div class="clast">' + (m.role === 'owner' ? 'владелец' : 'участник') + '</div></div>' +
+        ((owner || admin) && m.id !== g.ownerId ? '<button class="small" type="button">Кик</button>' : '');
+      const kb = row.querySelector('button');
+      if (kb) kb.onclick = async ev => {
+        ev.stopPropagation();
+        if (!confirm('Выгнать ' + m.name + '?')) return;
+        try { await api('/api/groups/' + g.id + '/kick', { method: 'POST', body: JSON.stringify({ userId: m.id }) }); openGroup(g.id); }
+        catch (e) { toast(errText(e), 'err'); }
+      };
+      if (m.id !== me.id) row.onclick = () => openUser(m.id);
+      ml.appendChild(row);
+    }
+    const j = v.querySelector('#gr-join');
+    if (j) j.onclick = async () => { try { await api('/api/groups/' + g.id + '/join', { method: 'POST' }); openGroup(g.id); loadGroups(); } catch (e) { toast(errText(e), 'err'); } };
+    const lv = v.querySelector('#gr-leave');
+    if (lv) lv.onclick = async () => { try { await api('/api/groups/' + g.id + '/leave', { method: 'POST' }); curGroup = null; nav('forum'); fgMode('groups'); } catch (e) { toast(errText(e), 'err'); } };
+    const del = v.querySelector('#gr-del');
+    if (del) del.onclick = async () => {
+      if (!confirm('Удалить группу и весь чат?')) return;
+      try { await api('/api/groups/' + g.id, { method: 'DELETE' }); curGroup = null; nav('forum'); fgMode('groups'); }
+      catch (e) { toast(errText(e), 'err'); }
+    };
+    nav('group');
+    loadGMsgs();
+    gTimer = setInterval(() => { if (curPage === 'group' && curGroup) loadGMsgs(true); }, 4000);
+  } catch (e) { toast(errText(e), 'err'); }
+}
+function stopGroupPoll() { if (gTimer) { clearInterval(gTimer); gTimer = null; } curGroup = null; }
+async function loadGMsgs(quiet) {
+  if (!curGroup) return;
+  const box = $('g-msgs');
+  try {
+    const arr = await api('/api/groups/' + curGroup.id + '/msgs?' + new URLSearchParams({ since: quiet ? gLast : 0 }));
+    if (!quiet) { box.replaceChildren(); if (!arr.length) box.innerHTML = '<div class="hint center">Тихо… напиши первым</div>'; }
+    else box.querySelector('.hint')?.remove();
+    for (const m of arr) {
+      gLast = Math.max(gLast, m.createdAt);
+      const d = document.createElement('div'); d.className = 'cm';
+      d.innerHTML = '<div class="cmeta"><b>' + nameLink(m.author, m.authorId, m.badge) + '</b><small>' + ago(m.createdAt) + '</small></div><p>' + esc(m.text) + '</p>';
+      if (me && (m.authorId === me.id || canAdmin() || curGroup.ownerId === me.id)) {
+        const x = document.createElement('button');
+        x.type = 'button'; x.className = 'cdel icon-btn'; x.innerHTML = ICON.x; x.title = 'Удалить';
+        x.onclick = async () => {
+          try { await api('/api/groups/' + curGroup.id + '/msgs/' + m.id, { method: 'DELETE' }); d.remove(); }
+          catch (e) { toast(errText(e), 'err'); }
+        };
+        d.querySelector('.cmeta').appendChild(x);
+      }
+      box.appendChild(d);
+    }
+    box.scrollTop = box.scrollHeight;
+  } catch (e) { if (!quiet) toast(errText(e), 'err'); }
+}
+async function sendGMsg() {
+  if (!curGroup) return;
+  const inp = $('g-text'), text = inp.value.trim(); if (!text) return;
+  inp.value = '';
+  try {
+    await api('/api/groups/' + curGroup.id + '/msgs', { method: 'POST', body: JSON.stringify({ text }) });
+    loadGMsgs(true);
+  } catch (e) { toast(errText(e), 'err'); inp.value = text; }
+}
+
 // ───────── личка ─────────
 async function pollUnread() {
   if (!token) return;
@@ -661,6 +819,16 @@ async function openUser(id) {
         } catch (e) { toast(errText(e), 'err'); }
       };
       acts.appendChild(f);
+      const ca = document.createElement('button');
+      ca.type = 'button'; ca.className = 'icon-btn'; ca.title = 'Позвонить'; ca.setAttribute('aria-label', 'Позвонить');
+      ca.innerHTML = ICON.phone;
+      ca.onclick = () => startCall(id, 'audio');
+      acts.appendChild(ca);
+      const cv = document.createElement('button');
+      cv.type = 'button'; cv.className = 'icon-btn'; cv.title = 'Видеозвонок'; cv.setAttribute('aria-label', 'Видеозвонок');
+      cv.innerHTML = ICON.video;
+      cv.onclick = () => startCall(id, 'video');
+      acts.appendChild(cv);
       const m = document.createElement('button');
       m.type = 'button'; m.textContent = 'Написать';
       m.onclick = () => { nav('dm'); dmToList(); openChat(id, u.name, u.avatar); };
@@ -679,7 +847,8 @@ async function openUser(id) {
 }
 const fCounters = u =>
   '<span><b>' + u.posts + '</b>постов</span><span><b>' + (u.likes || 0) + '</b>лайков</span>' +
-  '<span><b>' + u.followers + '</b>подписчиков</span><span><b>' + u.following + '</b>подписок</span>';
+  '<span><b>' + u.followers + '</b>подписчиков</span><span><b>' + u.following + '</b>подписок</span>' +
+  '<span><b>' + (u.views || 0) + '</b>просмотров</span>';
 
 // ───────── рассылка ─────────
 async function loadBroadcast() {
@@ -837,6 +1006,168 @@ async function sendBot() {
   } catch (e) { box.appendChild(botBubble('Ошибка: ' + errText(e), false)); }
 }
 
+// ───────── звонки (WebRTC, голос и видео) ─────────
+// Сигнал идёт через API, голос/видео — напрямую между игроками (P2P).
+const CALL = { pc: null, id: null, role: null, kind: 'audio', stream: null, timer: null, iceN: 0, muted: false, seen: new Set() };
+const STUN = [{ urls: 'stun:stun.l.google.com:19302' }];
+let ringCtx = null, ringTimer = null;
+function ringStart() {
+  ringStop();
+  try {
+    ringCtx = ringCtx || new (window.AudioContext || window.webkitAudioContext)();
+    ringCtx.resume?.();
+    const beep = () => {
+      if ($('call-modal').hidden) return;
+      const o = ringCtx.createOscillator(), g = ringCtx.createGain();
+      o.connect(g); g.connect(ringCtx.destination);
+      o.frequency.value = 440; g.gain.value = 0.08;
+      o.start(); o.stop(ringCtx.currentTime + 0.35);
+      ringTimer = setTimeout(beep, 900);
+    };
+    beep();
+  } catch (_) {}
+}
+function ringStop() { if (ringTimer) clearTimeout(ringTimer); ringTimer = null; }
+function callShow(state, name, avatar, kind) {
+  $('call-modal').hidden = false;
+  $('call-name').textContent = name;
+  $('call-ava').src = avatar ? url(avatar) : 'AG.png';
+  $('call-state').textContent = state + (kind === 'video' ? ' · видео' : ' · голос');
+  $('call-incoming').hidden = true; $('call-active').hidden = true;
+}
+function callHide() { $('call-modal').hidden = true; ringStop(); }
+function newPC() {
+  const pc = new RTCPeerConnection({ iceServers: STUN });
+  pc.onicecandidate = ev => {
+    if (ev.candidate && CALL.id) {
+      api('/api/calls/' + CALL.id + '/ice', { method: 'POST', body: JSON.stringify({ candidate: { candidate: ev.candidate.candidate, sdpMid: ev.candidate.sdpMid, sdpMLineIndex: ev.candidate.sdpMLineIndex } }) }).catch(() => {});
+    }
+  };
+  pc.ontrack = ev => {
+    const rv = $('call-remote');
+    rv.srcObject = ev.streams[0];
+    if (CALL.kind === 'video') $('call-vids').hidden = false;
+  };
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'connected') { ringStop(); $('call-state').textContent = 'На связи' + (CALL.kind === 'video' ? ' · видео' : ' · голос'); }
+    if (pc.connectionState === 'failed') { toast('Соединение не удалось (NAT?)', 'err'); hangupCall(); }
+  };
+  return pc;
+}
+async function micStream(video) {
+  return navigator.mediaDevices.getUserMedia({ audio: true, video: video ? { width: { ideal: 640 }, height: { ideal: 480 } } : false });
+}
+async function startCall(uid, kind) {
+  if (!uid || CALL.id) { if (CALL.id) toast(ERR.busy_self, 'err'); return; }
+  if (!navigator.mediaDevices?.getUserMedia) return toast('Браузер не умеет звонить', 'err');
+  let stream;
+  try { stream = await micStream(kind === 'video'); }
+  catch (_) { return toast('Нет доступа к микрофону/камере', 'err'); }
+  try {
+    CALL.kind = kind; CALL.role = 'caller'; CALL.stream = stream; CALL.iceN = 0; CALL.muted = false;
+    $('call-local').srcObject = stream;
+    $('call-vids').hidden = kind !== 'video';
+    const pc = CALL.pc = newPC();
+    stream.getTracks().forEach(t => pc.addTrack(t, stream));
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    const r = await api('/api/calls', { method: 'POST', body: JSON.stringify({ to: uid, kind, offer: { sdp: offer.sdp } }) });
+    CALL.id = r.id;
+    callShow('Вызов…', r.peer.name, r.peer.avatar, kind);
+    $('call-active').hidden = false;
+    ringStart();
+    CALL.timer = setInterval(pollCall, 2000);
+  } catch (e) {
+    endCallUI();
+    toast(errText(e), 'err');
+  }
+}
+async function pollCall() {
+  if (!CALL.id) return;
+  try {
+    const s = await api('/api/calls/' + CALL.id + '/state');
+    if (s.status === 'ended') { toast('Звонок завершён', ''); return endCallUI(); }
+    if (CALL.role === 'caller' && s.answer && CALL.pc.signalingState === 'have-local-offer') {
+      await CALL.pc.setRemoteDescription({ type: 'answer', sdp: s.answer.sdp });
+    }
+    for (const c of (s.ice || []).slice(CALL.iceN)) {
+      try { await CALL.pc.addIceCandidate({ candidate: c.candidate, sdpMid: c.sdpMid, sdpMLineIndex: c.sdpMLineIndex }); } catch (_) {}
+    }
+    CALL.iceN = (s.ice || []).length;
+  } catch (e) {
+    if (/not_found|http_404/.test(e.message)) return endCallUI();
+  }
+}
+async function acceptCall() {
+  const id = CALL.id;
+  if (!id) return;
+  try {
+    const s = await api('/api/calls/' + id + '/state');
+    if (s.status !== 'ringing' || !s.offer) return endCallUI();
+    const stream = await micStream(s.kind === 'video');
+    CALL.kind = s.kind; CALL.role = 'callee'; CALL.stream = stream; CALL.iceN = 0; CALL.muted = false;
+    $('call-local').srcObject = stream;
+    const pc = CALL.pc = newPC();
+    stream.getTracks().forEach(t => pc.addTrack(t, stream));
+    await pc.setRemoteDescription({ type: 'offer', sdp: s.offer.sdp });
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    await api('/api/calls/' + id + '/answer', { method: 'POST', body: JSON.stringify({ answer: { sdp: answer.sdp } }) });
+    $('call-incoming').hidden = true; $('call-active').hidden = false;
+    ringStop();
+    $('call-state').textContent = 'Соединение…';
+    CALL.timer = setInterval(pollCall, 2000);
+  } catch (e) { endCallUI(); toast(errText(e), 'err'); }
+}
+async function declineCall() {
+  const id = CALL.id;
+  endCallUI();
+  if (id) api('/api/calls/' + id + '/reject', { method: 'POST' }).catch(() => {});
+}
+async function hangupCall() {
+  const id = CALL.id;
+  endCallUI();
+  if (id) api('/api/calls/' + id + '/hangup', { method: 'POST' }).catch(() => {});
+}
+function endCallUI() {
+  ringStop();
+  if (CALL.timer) clearInterval(CALL.timer);
+  try { CALL.pc?.close(); } catch (_) {}
+  try { CALL.stream?.getTracks().forEach(t => t.stop()); } catch (_) {}
+  Object.assign(CALL, { pc: null, id: null, role: null, stream: null, timer: null, iceN: 0, muted: false });
+  const rv = $('call-remote'); if (rv) rv.srcObject = null;
+  const lv = $('call-local'); if (lv) lv.srcObject = null;
+  $('call-vids').hidden = true;
+  callHide();
+}
+async function checkIncoming() {
+  if (!token || CALL.id || $('call-modal').hidden === false) return;
+  try {
+    const list = await api('/api/calls/incoming');
+    const fresh = list.filter(c => !CALL.seen.has(c.id));
+    if (!fresh.length) return;
+    const c = fresh[0];
+    CALL.seen.add(c.id);
+    if (CALL.seen.size > 200) { const it = CALL.seen.values(); for (let i = 0; i < 100; i++) CALL.seen.delete(it.next().value); }
+    if (CALL.id) { api('/api/calls/' + c.id + '/reject', { method: 'POST' }).catch(() => {}); return; }
+    CALL.id = c.id; CALL.role = 'callee';
+    callShow(c.kind === 'video' ? 'Входящий видеозвонок' : 'Входящий звонок', c.peer.name, c.peer.avatar, c.kind);
+    $('call-incoming').hidden = false;
+    ringStart();
+    CALL.timer = setInterval(async () => {
+      try {
+        const s = await api('/api/calls/' + c.id + '/state');
+        if (s.status !== 'ringing') endCallUI();
+      } catch (_) { endCallUI(); }
+    }, 2500);
+  } catch (_) {}
+}
+let callTimer = null;
+function startCallPoll() {
+  if (callTimer) clearInterval(callTimer);
+  callTimer = setInterval(checkIncoming, 3000);
+}
+
 // ───────── новый пост ─────────
 function pickFile(input, max, test, err) {
   const f = input.files[0]; if (!f) return null;
@@ -909,6 +1240,7 @@ async function loadMine() {
 async function loadSettings() {
   if (!me) return;
   $('s-name').value = me.name; $('s-prev').src = me.avatar ? url(me.avatar) : 'AG.png';
+  $('s-calls').checked = !me.callsOff;
   try { const h = await api('/api/health'); $('health').textContent = 'Сервер ок · v' + (h.version || '?') + ' · постов: ' + h.posts + ' · юзеров: ' + h.users; }
   catch (_) { $('health').textContent = 'Сервер недоступен'; }
 }
@@ -917,6 +1249,7 @@ async function saveSettings() {
   if (name.length < 2) { toast(ERR.short_name, 'err'); return; }
   const fd = new FormData();
   fd.append('name', name);
+  fd.append('callsOff', $('s-calls').checked ? '0' : '1');
   if ($('s-pass').value) fd.append('password', $('s-pass').value);
   const ava = pickFile($('s-ava'), 5 << 20, f => f.type.startsWith('image/'), ERR.only_images);
   if (ava) fd.append('avatar', ava);
@@ -999,6 +1332,28 @@ function init() {
   $('dm-back').onclick = () => { dmToList(); loadConvos(); };
   $('dm-send').onclick = sendDM;
   $('dm-text').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sendDM(); } });
+  $('dm-call-a').onclick = () => dmPeer && startCall(dmPeer, 'audio');
+  $('dm-call-v').onclick = () => dmPeer && startCall(dmPeer, 'video');
+
+  // группы
+  $('fg-threads').onclick = () => fgMode('threads');
+  $('fg-groups').onclick = () => fgMode('groups');
+  $('gr-add').onclick = newGroup;
+  $('gr-back').onclick = () => { stopGroupPoll(); nav('forum'); fgMode('groups'); };
+  $('gr-q').oninput = () => loadGroups();
+  $('g-send').onclick = sendGMsg;
+  $('g-text').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sendGMsg(); } });
+
+  // звонки
+  $('call-accept').onclick = acceptCall;
+  $('call-decline').onclick = declineCall;
+  $('call-hang').onclick = hangupCall;
+  $('call-mute').onclick = () => {
+    CALL.muted = !CALL.muted;
+    try { CALL.stream?.getAudioTracks().forEach(t => { t.enabled = !CALL.muted; }); } catch (_) {}
+    $('call-mute').innerHTML = CALL.muted ? ICON.micOff : ICON.mic;
+    $('call-mute').classList.toggle('on', CALL.muted);
+  };
 
   // админка и навигация «назад»
   $('me-admin').onclick = () => nav('admin');
@@ -1049,7 +1404,7 @@ function init() {
 
   // старт
   if (!token) { showGate(); return; }
-  showApp(); nav('feed'); startDmPoll();
+  showApp(); nav('feed'); startDmPoll(); startCallPoll();
   refreshMe().then(() => { if (curPage === 'me') loadMine(); }).catch(() => toast('Нет связи с сервером', 'err'));
 }
 init();

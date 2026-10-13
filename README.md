@@ -19,6 +19,9 @@ npm start
 - Реакции под постами: 🔥 👏 🎯 🧠 💀 (можно ставить несколько, повторный клик снимает)
 - Клик по нику — профиль игрока: его посты, лайки, подписчики и кнопка «Подписаться»
 - Галочки ролей рядом с ником: АДМИН (корона) · МОД (щит) · ✓ проверенный
+- Просмотры: глазок со счётчиком под каждым постом, счётчик просмотров в профиле
+- Группы: вкладка «Группы» в разделе форумов — создать, вступить, чат, кик, удалить
+- Звонки: голос и видео 1-на-1 (WebRTC P2P) — кнопки в профиле и в шапке диалога, входящий звонок с мелодией; в настройках тумблер «Принимать звонки»
 
 ## Роли и модерация
 
@@ -74,10 +77,13 @@ npm start
 - `GET /api/health`
 - Форумы: `GET /api/forums`, `GET /api/threads?cat=&sort=active|new&q=`, `POST /api/threads {cat,title,body}`, `GET /api/threads/:id`, `POST /api/threads/:id/replies {text}`, `DELETE /api/threads/:id`, `DELETE /api/treplies/:id`
 - Личка: `GET /api/users?q=` (поиск акков), `GET /api/dm` (диалоги), `GET /api/dm/unread`, `GET/POST /api/dm/:uid`
-- Профили: `GET /api/users/:id` (посты, лайки, подписчики, `follows`), `POST /api/users/:id/follow` — переключить подписку
+- Профили: `GET /api/users/:id` (посты, лайки, подписчики, `follows`, счётчик просмотров), `POST /api/users/:id/follow` — переключить подписку
+- Просмотры: `POST /api/posts/:id/view` (+1 к посту; просмотры чужого профиля растут сами при открытии)
 - Рассылка: `GET /api/broadcasts` — последние 10 объявлений
 - Админка: `GET /api/admin/stats`, `GET /api/admin/users?q=`, `POST /api/admin/user/:id/role {admin,mod,verified}`, `DELETE /api/admin/user/:id`, `POST /api/admin/broadcast {text}`, `DELETE /api/admin/broadcast/:id`, `DELETE /api/admin/{post|comment|thread|reply}/:id`
 - Бот: `POST /api/bot {text}` → `{ reply }`
+- Группы: `GET /api/groups?mine=&q=`, `POST /api/groups {name,desc}`, `GET /api/groups/:id` (участники), `POST /api/groups/:id/{join,leave}`, `POST /api/groups/:id/kick {userId}`, `DELETE /api/groups/:id`, `GET/POST /api/groups/:id/msgs`, `DELETE /api/groups/:gid/msgs/:mid`
+- Звонки: `POST /api/calls {to,kind,offer}`, `GET /api/calls/incoming`, `GET /api/calls/:id/state`, `POST /api/calls/:id/{answer,ice,reject,hangup}`. Запрет звонков: `PATCH /api/me {callsOff:true}`. Медиа идёт напрямую между игроками, нужен белый IP хотя бы с одной стороны (без TURN за строгим NAT может не соединить)
 
 ## Деплой (Node 18+, `npm install`, старт `npm start`)
 

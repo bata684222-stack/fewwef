@@ -53,7 +53,7 @@ const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch
 // ───────────────────────── база ─────────────────────────
 // Формат: { users:[], posts:[], comments:[], votes:{ "postId:userId": 1|-1 },
 //   threads:[], treplies:[], dms:[] }
-function emptyDB() { return { users: [], posts: [], comments: [], votes: {}, reactions: {}, follows: {}, broadcasts: [], threads: [], treplies: [], dms: [] }; }
+function emptyDB() { return { users: [], posts: [], comments: [], votes: {}, reactions: {}, follows: {}, broadcasts: [], threads: [], treplies: [], dms: [], groups: [], gmsgs: [], calls: [] }; }
 
 function parseDB(raw) {
   const db = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -62,6 +62,7 @@ function parseDB(raw) {
   db.reactions = db.reactions || {};
   db.follows = db.follows || {};
   db.broadcasts = db.broadcasts || [];
+  db.groups = db.groups || []; db.gmsgs = db.gmsgs || []; db.calls = db.calls || [];
   if (Array.isArray(db.votes)) { // миграция со старого формата (массив)
     const m = {};
     for (const v of db.votes) m[v.postId + ':' + v.userId] = v.value;
@@ -96,14 +97,16 @@ const usersById = new Map();
 const usersByName = new Map(); // lower-case имя -> user
 const postsById = new Map();
 const threadsById = new Map();
+const groupsById = new Map();
 const stats = new Map();       // postId -> { l, d, c }
 
 const st = id => { let s = stats.get(id); if (!s) { s = { l: 0, d: 0, c: 0, r: {} }; stats.set(id, s); } return s; };
 function rebuildIndexes() {
-  usersById.clear(); usersByName.clear(); postsById.clear(); threadsById.clear(); stats.clear();
+  usersById.clear(); usersByName.clear(); postsById.clear(); threadsById.clear(); groupsById.clear(); stats.clear();
   for (const u of db.users) { usersById.set(u.id, u); usersByName.set(u.name.toLowerCase(), u); }
   for (const p of db.posts) postsById.set(p.id, p);
   for (const t of db.threads) threadsById.set(t.id, t);
+  for (const g of db.groups) groupsById.set(g.id, g);
   for (const [k, v] of Object.entries(db.votes)) {
     const s = st(k.split(':')[0]);
     if (v === 1) s.l++; else if (v === -1) s.d++;
@@ -301,7 +304,7 @@ function authNeed(req, res, next) {
   authOpt(req, res, () => req.user ? next() : res.status(401).json({ error: 'need_auth' }));
 }
 
-const pubUser = u => ({ id: u.id, name: u.name, avatar: u.avatar || null, badge: badgeOf(u), createdAt: u.createdAt });
+const pubUser = u => ({ id: u.id, name: u.name, avatar: u.avatar || null, badge: badgeOf(u), views: u.views || 0, callsOff: !!u.callsOff, createdAt: u.createdAt });
 const REACTIONS = ['🔥', '👏', '🎯', '🧠', '💀'];
 function postDTO(p, viewerId) {
   const s = stats.get(p.id) || { l: 0, d: 0, c: 0, r: {} };
@@ -314,7 +317,7 @@ function postDTO(p, viewerId) {
     ...p,
     author: a ? a.name : p.author,           // всегда актуальные ник/аватар
     avatar: a ? a.avatar || null : null,
-    likes: s.l, dislikes: s.d, comments: s.c,
+    likes: s.l, dislikes: s.d, comments: s.c, views: p.views || 0,
     reactions: s.r, myReactions: mine,
     authorBadge: badgeOf(a),
     myVote: viewerId ? (db.votes[p.id + ':' + viewerId] || 0) : 0
@@ -415,6 +418,10 @@ app.patch('/api/me', authNeed, writeLimiter, ...withUploads(upload.single('avata
   }
   u.name = name;
   if (newPass) { u.pass = newPass; u.tv = (u.tv || 0) + 1; } // старые токены умирают
+  if (req.body?.callsOff !== undefined) { // '1'/true = не звонить мне
+    const v = req.body.callsOff;
+    u.callsOff = v === true || v === '1' || v === 'true' || v === 'on';
+  }
   if (req.file) {
     const nm = await persistUpload(req.file);
     safeUnlink(u.avatar); // старый аватар
@@ -446,6 +453,14 @@ function dropUser(u) {
   db.treplies = db.treplies.filter(r => r.authorId !== u.id && !myThreads.has(r.threadId));
   db.dms = db.dms.filter(m => m.fromId !== u.id && m.toId !== u.id);
   for (const id of myThreads) threadsById.delete(id);
+  // группы: свои удаляем целиком, из чужих выходим
+  const myGroups = new Set(db.groups.filter(g => g.ownerId === u.id).map(g => g.id));
+  db.groups = db.groups.filter(g => g.ownerId !== u.id);
+  for (const g of db.groups) delete g.members[u.id];
+  db.gmsgs = db.gmsgs.filter(m => m.authorId !== u.id && !myGroups.has(m.groupId));
+  for (const g of db.groups) groupsById.delete(g.id);
+  for (const id of myGroups) groupsById.delete(id);
+  db.calls = db.calls.filter(c => c.from !== u.id && c.to !== u.id);
   db.users = db.users.filter(x => x.id !== u.id);
   usersById.delete(u.id); usersByName.delete(u.name.toLowerCase());
   rebuildIndexes(); saveDB();
@@ -549,6 +564,15 @@ app.post('/api/posts/:id/react', authNeed, writeLimiter, (req, res) => {
   else { db.reactions[key] = 1; s.r[emoji] = (s.r[emoji] || 0) + 1; }
   saveDB();
   res.json(postDTO(p, req.user.id));
+});
+
+// просмотр поста: +1 (фронт шлёт один раз за сессию, накрутка лечится на клиенте)
+app.post('/api/posts/:id/view', authOpt, (req, res) => {
+  const p = postsById.get(req.params.id);
+  if (!p) fail(404, 'not_found');
+  p.views = (p.views || 0) + 1;
+  saveDB();
+  res.json({ views: p.views });
 });
 
 // ───────────────────────── комментарии ─────────────────────────
@@ -735,6 +759,7 @@ app.get('/api/users/:id', authNeed, (req, res) => {
   const u = usersById.get(req.params.id);
   if (!u) fail(404, 'not_found');
   const self = req.user.id === u.id;
+  if (!self) { u.views = (u.views || 0) + 1; saveDB(); } // чужие просмотры профиля считаем
   const posts = db.posts.filter(p => p.authorId === u.id);
   let following = 0;
   for (const t of Object.values(db.follows)) if (t[u.id]) following++;
@@ -939,6 +964,204 @@ app.post('/api/bot', authNeed, writeLimiter, (req, res) => {
   if (!text) fail(400, 'empty');
   const reply = botAnswer(text, req.user);
   res.json({ reply, at: Date.now() });
+});
+
+// ───────────────────────── группы ─────────────────────────
+function groupDTO(g, viewerId) {
+  const o = usersById.get(g.ownerId);
+  const members = Object.keys(g.members || {});
+  return {
+    id: g.id, name: g.name, desc: g.desc || '',
+    owner: o ? o.name : '—', ownerId: g.ownerId,
+    members: members.length, isMember: !!viewerId && !!g.members[viewerId],
+    myRole: viewerId ? (g.members[viewerId] || null) : null,
+    createdAt: g.createdAt
+  };
+}
+app.get('/api/groups', authNeed, (req, res) => {
+  const q = String(req.query.q || '').trim().toLowerCase().slice(0, 30);
+  const mine = String(req.query.mine || '') === '1';
+  let list = db.groups.slice().sort((a, b) => b.createdAt - a.createdAt);
+  if (mine) list = list.filter(g => g.members[req.user.id]);
+  if (q) list = list.filter(g => (g.name + ' ' + (g.desc || '')).toLowerCase().includes(q));
+  res.json(list.slice(0, 100).map(g => groupDTO(g, req.user.id)));
+});
+app.post('/api/groups', authNeed, writeLimiter, (req, res) => {
+  const name = String(req.body?.name || '').trim().slice(0, 40);
+  const desc = String(req.body?.desc || '').trim().slice(0, 300);
+  if (name.length < 2) fail(400, 'short_title');
+  const g = { id: uid(), name, desc, ownerId: req.user.id, members: { [req.user.id]: 'owner' }, createdAt: Date.now() };
+  db.groups.unshift(g); groupsById.set(g.id, g); saveDB();
+  res.json(groupDTO(g, req.user.id));
+});
+app.get('/api/groups/:id', authNeed, (req, res) => {
+  const g = groupsById.get(req.params.id);
+  if (!g) fail(404, 'not_found');
+  const members = Object.entries(g.members || {}).map(([uid, role]) => {
+    const u = usersById.get(uid);
+    return u ? { id: u.id, name: u.name, avatar: u.avatar || null, badge: badgeOf(u), role } : null;
+  }).filter(Boolean);
+  res.json({ ...groupDTO(g, req.user.id), members });
+});
+app.post('/api/groups/:id/join', authNeed, writeLimiter, (req, res) => {
+  const g = groupsById.get(req.params.id);
+  if (!g) fail(404, 'not_found');
+  g.members[req.user.id] = g.members[req.user.id] || 'member';
+  saveDB();
+  res.json(groupDTO(g, req.user.id));
+});
+app.post('/api/groups/:id/leave', authNeed, writeLimiter, (req, res) => {
+  const g = groupsById.get(req.params.id);
+  if (!g) fail(404, 'not_found');
+  if (g.ownerId === req.user.id) fail(400, 'owner_cant_leave');
+  delete g.members[req.user.id];
+  saveDB();
+  res.json({ ok: true });
+});
+app.post('/api/groups/:id/kick', authNeed, writeLimiter, (req, res) => {
+  const g = groupsById.get(req.params.id);
+  if (!g) fail(404, 'not_found');
+  const target = String(req.body?.userId || '');
+  if (!target) fail(400, 'bad_request');
+  const canKick = g.ownerId === req.user.id || isMod(req.user);
+  if (!canKick) fail(403, 'not_admin');
+  if (target === g.ownerId) fail(400, 'bad_request'); // владельца кикнуть нельзя
+  delete g.members[target];
+  saveDB();
+  res.json({ ok: true });
+});
+app.delete('/api/groups/:id', authNeed, writeLimiter, (req, res) => {
+  const g = groupsById.get(req.params.id);
+  if (!g) fail(404, 'not_found');
+  if (g.ownerId !== req.user.id && !isAdmin(req.user)) fail(403, 'not_admin');
+  db.groups = db.groups.filter(x => x.id !== g.id);
+  db.gmsgs = db.gmsgs.filter(m => m.groupId !== g.id);
+  groupsById.delete(g.id);
+  saveDB();
+  res.json({ ok: true });
+});
+app.get('/api/groups/:id/msgs', authNeed, (req, res) => {
+  const g = groupsById.get(req.params.id);
+  if (!g) fail(404, 'not_found');
+  if (!g.members[req.user.id] && !isMod(req.user)) fail(403, 'not_member');
+  const since = Number(req.query.since || 0);
+  const list = db.gmsgs.filter(m => m.groupId === g.id && m.createdAt > since)
+    .sort((a, b) => a.createdAt - b.createdAt).slice(-200);
+  res.json(list.map(m => ({ ...m, author: usersById.get(m.authorId)?.name || m.author, badge: badgeOf(usersById.get(m.authorId)) })));
+});
+app.post('/api/groups/:id/msgs', authNeed, writeLimiter, (req, res) => {
+  const g = groupsById.get(req.params.id);
+  if (!g) fail(404, 'not_found');
+  if (!g.members[req.user.id] && !isMod(req.user)) fail(403, 'not_member');
+  const text = String(req.body?.text || '').trim().slice(0, 1000);
+  if (!text) fail(400, 'empty');
+  const m = { id: uid(), groupId: g.id, author: req.user.name, authorId: req.user.id, text, createdAt: Date.now() };
+  db.gmsgs.push(m); saveDB();
+  res.json({ ...m, badge: badgeOf(req.user) });
+});
+app.delete('/api/groups/:gid/msgs/:mid', authNeed, writeLimiter, (req, res) => {
+  const g = groupsById.get(req.params.gid);
+  if (!g) fail(404, 'not_found');
+  const m = db.gmsgs.find(x => x.id === req.params.mid && x.groupId === g.id);
+  if (!m) fail(404, 'not_found');
+  const can = m.authorId === req.user.id || g.ownerId === req.user.id || isMod(req.user);
+  if (!can) fail(403, 'not_yours');
+  db.gmsgs = db.gmsgs.filter(x => x.id !== m.id);
+  saveDB();
+  res.json({ ok: true });
+});
+
+// ───────────────────────── звонки (WebRTC, сигнал через API) ─────────────────────────
+// Поток: caller создаёт offer → POST /api/calls → callee видит входящий → answer.
+// ICE-кандидаты обе стороны шлют сюда же, забирают через state. Медиа идёт напрямую (P2P).
+function pruneCalls() {
+  const old = Date.now() - 5 * 60e3;
+  const n0 = db.calls.length;
+  db.calls = db.calls.filter(c => c.status !== 'ended' || c.updatedAt > old);
+  if (db.calls.length !== n0) saveDB();
+}
+function activeCallOf(uid) {
+  return db.calls.find(c => (c.from === uid || c.to === uid) && (c.status === 'ringing' || c.status === 'active'));
+}
+function callPeer(u, c) {
+  const pid = c.from === u.id ? c.to : c.from;
+  const p = usersById.get(pid);
+  return p ? { id: p.id, name: p.name, avatar: p.avatar || null, badge: badgeOf(p) } : { id: pid, name: 'Удалён', avatar: null, badge: {} };
+}
+app.post('/api/calls', authNeed, writeLimiter, (req, res) => {
+  pruneCalls();
+  const peer = usersById.get(String(req.body?.to || ''));
+  if (!peer) fail(404, 'not_found');
+  if (peer.id === req.user.id) fail(400, 'bad_request');
+  if (peer.callsOff) fail(403, 'calls_off'); // игрок запретил звонки
+  if (activeCallOf(req.user.id)) fail(409, 'busy_self');
+  if (activeCallOf(peer.id)) fail(409, 'busy_peer');
+  const kind = req.body?.kind === 'video' ? 'video' : 'audio';
+  const offer = req.body?.offer;
+  if (!offer || typeof offer.sdp !== 'string' || offer.sdp.length > 20000) fail(400, 'bad_offer');
+  const c = {
+    id: uid(), from: req.user.id, to: peer.id, kind,
+    offer: { type: 'offer', sdp: String(offer.sdp).slice(0, 20000) },
+    answer: null, iceFrom: [], iceTo: [],
+    status: 'ringing', createdAt: Date.now(), updatedAt: Date.now()
+  };
+  db.calls.push(c); saveDB();
+  res.json({ id: c.id, status: c.status, peer: callPeer(req.user, c) });
+});
+app.get('/api/calls/incoming', authNeed, (req, res) => {
+  pruneCalls();
+  const list = db.calls.filter(c => c.to === req.user.id && c.status === 'ringing')
+    .map(c => ({ id: c.id, kind: c.kind, peer: callPeer(req.user, c), createdAt: c.createdAt }));
+  res.json(list);
+});
+app.get('/api/calls/:id/state', authNeed, (req, res) => {
+  const c = db.calls.find(x => x.id === req.params.id);
+  if (!c || (c.from !== req.user.id && c.to !== req.user.id)) fail(404, 'not_found');
+  const mine = c.from === req.user.id;
+  res.json({
+    id: c.id, kind: c.kind, status: c.status, peer: callPeer(req.user, c),
+    offer: !mine && c.status === 'ringing' ? c.offer : null,
+    answer: mine ? c.answer : null,
+    ice: mine ? c.iceTo : c.iceFrom
+  });
+});
+app.post('/api/calls/:id/answer', authNeed, writeLimiter, (req, res) => {
+  const c = db.calls.find(x => x.id === req.params.id);
+  if (!c || c.to !== req.user.id || c.status !== 'ringing') fail(404, 'not_found');
+  const answer = req.body?.answer;
+  if (!answer || typeof answer.sdp !== 'string' || answer.sdp.length > 20000) fail(400, 'bad_offer');
+  c.answer = { type: 'answer', sdp: String(answer.sdp).slice(0, 20000) };
+  c.status = 'active'; c.updatedAt = Date.now();
+  saveDB();
+  res.json({ ok: true });
+});
+app.post('/api/calls/:id/ice', authNeed, writeLimiter, (req, res) => {
+  const c = db.calls.find(x => x.id === req.params.id);
+  if (!c || (c.from !== req.user.id && c.to !== req.user.id)) fail(404, 'not_found');
+  if (c.status === 'ended') fail(404, 'not_found');
+  const cand = req.body?.candidate;
+  if (!cand || typeof cand.candidate !== 'string' || cand.candidate.length > 4000) fail(400, 'bad_ice');
+  const mine = c.from === req.user.id;
+  const arr = mine ? c.iceFrom : c.iceTo;
+  if (arr.length > 100) fail(400, 'too_many');
+  arr.push({ candidate: String(cand.candidate).slice(0, 4000), sdpMid: String(cand.sdpMid || '').slice(0, 64), sdpMLineIndex: Number(cand.sdpMLineIndex) || 0 });
+  c.updatedAt = Date.now();
+  saveDB();
+  res.json({ ok: true, n: arr.length });
+});
+app.post('/api/calls/:id/reject', authNeed, writeLimiter, (req, res) => {
+  const c = db.calls.find(x => x.id === req.params.id);
+  if (!c || c.to !== req.user.id || c.status !== 'ringing') fail(404, 'not_found');
+  c.status = 'ended'; c.updatedAt = Date.now();
+  saveDB();
+  res.json({ ok: true });
+});
+app.post('/api/calls/:id/hangup', authNeed, writeLimiter, (req, res) => {
+  const c = db.calls.find(x => x.id === req.params.id);
+  if (!c || (c.from !== req.user.id && c.to !== req.user.id)) fail(404, 'not_found');
+  c.status = 'ended'; c.updatedAt = Date.now();
+  saveDB();
+  res.json({ ok: true });
 });
 
 // ───────────────────────── fallback и ошибки ─────────────────────────

@@ -147,6 +147,7 @@
           <button id="s-eye" class="eye" type="button" aria-label="Показать пароль" data-ic="eye"></button>
         </div>
       </label>
+      <label class="switch"><input id="s-calls" type="checkbox" checked><span class="sl"></span>Принимать звонки</label>
       <button id="s-save" class="primary wide" type="button" data-ic="check">Сохранить</button>
     </div>
 
@@ -158,8 +159,13 @@
     <div class="hint center" id="health" aria-live="polite"></div>
   </main>
 
-  <!-- ФОРУМЫ -->
+  <!-- ФОРУМЫ И ГРУППЫ -->
   <main id="page-forum" class="page" style="display:none">
+    <div class="seg" role="tablist" aria-label="Форумы или группы">
+      <button id="fg-threads" class="on" type="button" role="tab">Темы</button>
+      <button id="fg-groups" type="button" role="tab">Группы</button>
+    </div>
+    <div id="forum-topics-view" style="margin-top:12px">
     <div class="seg" role="tablist" aria-label="Разделы форума" id="forum-cats"></div>
     <div class="form" style="margin-top:12px">
       <label class="fld">Новая тема
@@ -173,6 +179,32 @@
     <h3>Темы</h3>
     <div id="threads"></div>
     <div class="empty" id="threads-empty" hidden></div>
+    </div>
+    <div id="forum-groups-view" style="margin-top:12px" hidden>
+      <div class="form">
+        <label class="fld">Новая группа
+          <input id="gr-name" placeholder="Название клана…" maxlength="40" autocomplete="off">
+        </label>
+        <label class="fld">Описание
+          <textarea id="gr-desc" rows="2" placeholder="О чём группа…" maxlength="300"></textarea>
+        </label>
+        <button id="gr-add" class="primary wide" type="button">Создать группу</button>
+      </div>
+      <h3>Мои группы</h3>
+      <div id="groups-mine"></div>
+      <h3>Все группы</h3>
+      <input id="gr-q" type="search" placeholder="Поиск групп…" maxlength="30" autocomplete="off" style="margin-bottom:10px">
+      <div id="groups-all"></div>
+      <div class="empty" id="groups-empty" hidden></div>
+    </div>
+  </main>
+
+  <!-- ГРУППА -->
+  <main id="page-group" class="page" style="display:none">
+    <button id="gr-back" class="small" type="button">← К группам</button>
+    <div id="group-view" style="margin-top:12px"></div>
+    <div id="g-msgs"></div>
+    <div class="cform" id="g-form"><input id="g-text" placeholder="Сообщение в группу…" maxlength="1000" aria-label="Сообщение" enterkeyhint="send"><button id="g-send" class="icon-btn primary" type="button" aria-label="Отправить" data-ic="send"></button></div>
   </main>
 
   <!-- ТЕМА ФОРУМА -->
@@ -201,7 +233,7 @@
     </div>
     <div id="dm-chat-view" hidden>
       <button id="dm-back" class="small" type="button">← К диалогам</button>
-      <div class="chathead"><img id="dm-ava" src="AG.png" width="40" height="40" alt=""><b id="dm-name">—</b></div>
+      <div class="chathead"><img id="dm-ava" src="AG.png" width="40" height="40" alt=""><b id="dm-name">—</b><span class="spacer"></span><button id="dm-call-a" class="icon-btn" type="button" title="Позвонить" aria-label="Позвонить" data-ic="phone"></button><button id="dm-call-v" class="icon-btn" type="button" title="Видеозвонок" aria-label="Видеозвонок" data-ic="video"></button></div>
       <div id="dm-msgs"></div>
       <div class="cform"><input id="dm-text" placeholder="Сообщение…" maxlength="1000" aria-label="Сообщение" enterkeyhint="send"><button id="dm-send" class="icon-btn primary" type="button" aria-label="Отправить" data-ic="send"></button></div>
     </div>
@@ -243,6 +275,28 @@
 </div>
 
 <div id="lightbox" hidden><button class="icon-btn" id="lb-close" type="button" aria-label="Закрыть" data-ic="x"></button><img id="lb-img" alt=""></div>
+
+<!-- ЗВОНОК -->
+<div id="call-modal" hidden>
+  <div class="call-box">
+    <img id="call-ava" src="AG.png" width="84" height="84" alt="">
+    <b id="call-name">—</b>
+    <div class="hint" id="call-state">Соединение…</div>
+    <div class="call-vids" id="call-vids" hidden>
+      <video id="call-remote" autoplay playsinline></video>
+      <video id="call-local" autoplay playsinline muted></video>
+    </div>
+    <div class="call-btns" id="call-incoming">
+      <button id="call-accept" class="icon-btn call-ok" type="button" aria-label="Принять" data-ic="phone"></button>
+      <button id="call-decline" class="icon-btn call-no" type="button" aria-label="Отклонить" data-ic="phoneOff"></button>
+    </div>
+    <div class="call-btns" id="call-active" hidden>
+      <button id="call-mute" class="icon-btn" type="button" aria-label="Микрофон" data-ic="mic"></button>
+      <button id="call-hang" class="icon-btn call-no" type="button" aria-label="Завершить" data-ic="phoneOff"></button>
+    </div>
+  </div>
+</div>
+
 <div id="toasts" aria-live="polite"></div>
 <script src="app.js" defer></script>
 </body>

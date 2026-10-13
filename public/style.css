@@ -131,6 +131,19 @@ h3::after{content:"";flex:1;height:1px;background:var(--line)}
 .del{color:var(--dim)}
 .del:hover{color:var(--bad);border-color:rgba(255,107,96,.4)}
 
+/* ---------- просмотры ---------- */
+.views{display:inline-flex;align-items:center;gap:5px;color:var(--dim);font-size:13px;font-weight:600;white-space:nowrap}
+.views .ic{width:16px;height:16px}
+
+/* ---------- тумблер ---------- */
+.switch{display:flex;align-items:center;gap:10px;color:var(--txt);font-size:15px;font-weight:600;cursor:pointer;user-select:none}
+.switch input{position:absolute;opacity:0;width:0;height:0;min-height:0;padding:0}
+.switch .sl{width:46px;height:26px;flex:none;border-radius:13px;background:#2a2a33;border:1px solid var(--line2);position:relative;transition:background .2s,border-color .2s}
+.switch .sl::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#8a91a6;transition:left .2s,background .2s}
+.switch input:checked + .sl{background:rgba(245,166,35,.35);border-color:var(--acc)}
+.switch input:checked + .sl::after{left:22px;background:var(--acc2)}
+.switch input:focus-visible + .sl{outline:2px solid var(--acc);outline-offset:2px}
+
 /* ---------- реакции ---------- */
 .react{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:0 14px 12px;position:relative}
 button.re{min-height:34px;padding:0 10px;border-radius:999px;background:var(--card2);font-size:16px;line-height:1;gap:5px}
@@ -266,10 +279,34 @@ button.re.add:hover{color:var(--acc2)}
 .convo .cinfo b{color:#fff;font-size:16px}
 .convo .clast{color:var(--dim);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
 .convo .ctime{color:var(--dim);font-size:11px;flex:none}
+.botrow .ic{color:var(--acc2);width:22px;height:22px}
+.botrow img.botava{border-color:var(--acc)}
 .unread-n{min-width:22px;height:22px;border-radius:11px;background:var(--bad);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 6px;flex:none}
 .chathead{display:flex;align-items:center;gap:10px;padding:12px 2px 4px}
 .chathead img{width:40px;height:40px;border-radius:50%;object-fit:cover;border:1px solid var(--line2);background:#000}
 .chathead b{color:#fff;font-size:18px}
+.chathead .spacer{flex:1}
+.chathead .icon-btn{width:38px;height:38px;min-height:38px}
+
+/* ---------- сообщения групп ---------- */
+#g-msgs{display:flex;flex-direction:column;gap:8px;padding:10px 2px;max-height:56vh;overflow-y:auto}
+#g-form{margin-top:8px}
+
+/* ---------- звонки ---------- */
+#call-modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.9);animation:fade .2s;backdrop-filter:blur(8px)}
+.call-box{display:flex;flex-direction:column;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line2);border-radius:20px;padding:28px 30px;max-width:92vw;animation:rise .3s both;box-shadow:0 20px 80px rgba(0,0,0,.8)}
+.call-box img{width:84px;height:84px;border-radius:50%;object-fit:cover;border:2px solid var(--acc);background:#000;animation:glow 2s ease-in-out infinite}
+.call-box b{color:#fff;font-size:20px}
+.call-vids{position:relative;width:min(420px,80vw)}
+.call-vids video{background:#000;border-radius:12px;border:1px solid var(--line2)}
+#call-remote{width:100%;max-height:46vh}
+#call-local{position:absolute;right:8px;bottom:8px;width:110px;border-radius:10px}
+.call-btns{display:flex;gap:18px;margin-top:6px}
+.call-btns .icon-btn{width:58px;height:58px;min-height:58px}
+.call-btns .ic{width:26px;height:26px}
+.call-ok{background:rgba(95,214,138,.16)!important;border-color:var(--ok)!important;color:var(--ok)!important}
+.call-no{background:rgba(255,107,96,.14)!important;border-color:var(--bad)!important;color:var(--bad)!important}
+.call-btns .on{background:rgba(245,166,35,.16);border-color:var(--acc);color:var(--acc2)}
 #dm-msgs{display:flex;flex-direction:column;gap:8px;padding:10px 2px;max-height:58vh;overflow-y:auto}
 .bub{max-width:82%;padding:8px 13px;border-radius:15px;font-size:15px;line-height:1.35;word-break:break-word;animation:rise .2s both}
 .bub.me{align-self:flex-end;background:rgba(245,166,35,.16);border:1px solid rgba(245,166,35,.55);border-bottom-right-radius:5px}
