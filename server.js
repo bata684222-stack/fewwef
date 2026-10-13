@@ -23,10 +23,13 @@ const BCRYPT_COST = 10;
 const IMG_MAX = 5 * 1024 * 1024;
 const JSON_MAX = 2 * 1024 * 1024;
 const NAME_RE = /^[\p{L}\p{N}_\-. ]{2,20}$/u;
-// аккаунты, которым роль админа выдаётся автоматически при регистрации
-const BOOT_ADMINS = (process.env.ADMIN_NAMES || 'xqzas')
+// имена владельцев: админка им выдаётся только через /api/setup с верным паролем,
+// просто зарегистрировать такой ник и получить права НЕЛЬЗЯ
+const ADMIN_NAMES = (process.env.ADMIN_NAMES || 'xqzas')
   .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-const BOOT_VERIFIED = (process.env.VERIFIED_NAMES || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+const VERIFIED_NAMES = (process.env.VERIFIED_NAMES || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+const hasAdmins = () => db.users.some(isAdmin);
+const reservedName = n => ADMIN_NAMES.includes(n.toLowerCase());
 const isAdmin = u => !!u && !!u.admin;
 const isMod = u => !!u && (!!u.admin || !!u.mod);
 const badgeOf = u => ({ admin: !!(u && u.admin), mod: !!(u && u.mod && !u.admin), verified: !!(u && u.verified) });
@@ -97,7 +100,7 @@ const stats = new Map();       // postId -> { l, d, c }
 
 const st = id => { let s = stats.get(id); if (!s) { s = { l: 0, d: 0, c: 0, r: {} }; stats.set(id, s); } return s; };
 function rebuildIndexes() {
-  usersById.clear(); usersByName.clear(); postsById.clear(); stats.clear();
+  usersById.clear(); usersByName.clear(); postsById.clear(); threadsById.clear(); stats.clear();
   for (const u of db.users) { usersById.set(u.id, u); usersByName.set(u.name.toLowerCase(), u); }
   for (const p of db.posts) postsById.set(p.id, p);
   for (const t of db.threads) threadsById.set(t.id, t);
@@ -176,7 +179,8 @@ const collectFiles = req => [
 function fileName(rel) {
   if (!rel || typeof rel !== 'string') return null;
   const base = path.basename(rel);
-  return base && base !== '.' && base !== '..' ? base : null;
+  if (!base || base === '.' || base === '..' || base.startsWith('.')) return null; // без dotfiles
+  return base;
 }
 function safeUnlink(rel) {
   const n = fileName(rel);
@@ -240,11 +244,42 @@ app.get('/uploads/:name', wrap(async (req, res) => {
   if (!buf) return res.status(404).end();
   res.set('Content-Type', mimeOf(name));
   res.set('Cache-Control', 'public, max-age=31536000, immutable');
-  res.set('Content-Disposition', mimeOf(name) === 'application/json' ? 'inline' : 'inline');
+  res.set('Content-Disposition', 'inline');
   res.set('X-Content-Type-Options', 'nosniff');
   res.send(buf);
 }));
-app.use(express.static(PUBLIC_DIR, { maxAge: '1h', index: 'index.html', dotfiles: 'deny' }));
+// ───────────────────────── статика и версия ─────────────────────────
+// Идея: index.html всегда свежий (no-cache), а app.js/style.css помечаются
+// версией-хэшем в имени (?v=...), поэтому браузер не берёт старый файл из кэша,
+// но зря не качает его при каждом обновлении.
+const ASSETS = ['app.js', 'style.css', 'AG.png'];
+let ASSET_V = 'dev';
+function computeAssetVersion() {
+  const h = crypto.createHash('sha1');
+  for (const f of ASSETS) {
+    try { h.update(fs.readFileSync(path.join(PUBLIC_DIR, f))); }
+    catch (_) { h.update(f); }
+  }
+  ASSET_V = h.digest('hex').slice(0, 8);
+}
+const INDEX_FILE = path.join(PUBLIC_DIR, 'index.html');
+function serveIndex(_req, res) {
+  let html;
+  try { html = fs.readFileSync(INDEX_FILE, 'utf8'); }
+  catch (_) { return res.status(500).type('txt').send('index.html не найден'); }
+  // подставляем версию в ссылки на ассеты
+  html = html.replace(/(src|href)="(app\.js|style\.css)(?:\?v=[a-z0-9]+)?"/gi,
+    (_, a, f) => a + '="' + f + '?v=' + ASSET_V + '"');
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.set('X-App-Version', ASSET_V);
+  res.type('html').send(html);
+}
+app.get('/', serveIndex);
+app.get('/index.html', serveIndex); // и напрямую — тоже без кэша
+// ассеты — надолго: имя меняется при каждом деплое через ?v=
+app.use(express.static(PUBLIC_DIR, { maxAge: '30d', immutable: true, index: false, dotfiles: 'deny' }));
 
 // ───────────────────────── auth ─────────────────────────
 const signToken = u => jwt.sign({ id: u.id, tv: u.tv || 0 }, JWT_SECRET, { expiresIn: '30d' });
@@ -297,11 +332,11 @@ app.post('/api/register', authLimiter, wrap(async (req, res) => {
   if (password.length < 4) fail(400, 'short_pass');
   if (password.length > 72) fail(400, 'long_pass'); // лимит bcrypt
   if (usersByName.has(name.toLowerCase())) fail(409, 'name_taken');
+  if (reservedName(name) && hasAdmins()) fail(403, 'reserved_name'); // ник владельца занят им самим
   const pass = await bcrypt.hash(password, BCRYPT_COST);
   if (usersByName.has(name.toLowerCase())) fail(409, 'name_taken'); // гонка во время await
   const u = { id: uid(), name, pass, avatar: null, tv: 0, createdAt: Date.now() };
-  if (BOOT_ADMINS.includes(name.toLowerCase())) u.admin = true; // заранее заданные админы
-  if (BOOT_VERIFIED.includes(name.toLowerCase())) u.verified = true;
+  if (!hasAdmins()) u.admin = true; // самый первый игрок площадки — админ, дальше только выдача
   db.users.push(u); usersById.set(u.id, u); usersByName.set(name.toLowerCase(), u);
   saveDB();
   res.json({ token: signToken(u), user: pubUser(u) });
@@ -314,6 +349,38 @@ app.post('/api/login', authLimiter, wrap(async (req, res) => {
   const ok = await bcrypt.compare(password, u ? u.pass : DUMMY_HASH); // время одинаково с/без юзера
   if (!u || !ok) fail(401, 'bad_login');
   res.json({ token: signToken(u), user: pubUser(u) });
+}));
+
+// ───────────────────────── первичное получение прав ─────────────────────────
+// Единственный легальный путь стать админом «с нуля»:
+//  - админов в базе нет вообще → создаёт/выдаёт первому заявителю;
+//  - владелец из ADMIN_NAMES со СВОИМ паролем → выдача в любое время.
+// Подобрать чужой пароль нельзя, просто зарегистрировать ник владельца — тоже.
+app.post('/api/setup', authLimiter, wrap(async (req, res) => {
+  const name = String(req.body?.name || '').trim();
+  const password = String(req.body?.password || '');
+  if (name.length < 2 || !NAME_RE.test(name)) fail(400, 'bad_name');
+  if (password.length < 4 || password.length > 72) fail(400, 'short_pass');
+  const key = name.toLowerCase();
+  const u = usersByName.get(key);
+  if (u) {
+    const ok = await bcrypt.compare(password, u.pass);
+    if (!ok) fail(401, 'bad_login');
+    if (ADMIN_NAMES.includes(key)) u.admin = true;
+    if (VERIFIED_NAMES.includes(key)) u.verified = true;
+    if (!hasAdmins()) u.admin = true; // админов нет — первый заявитель забирает площадку
+    saveDB();
+    return res.json({ token: signToken(u), user: pubUser(u) });
+  }
+  if (hasAdmins() && !ADMIN_NAMES.includes(key) && !VERIFIED_NAMES.includes(key)) fail(403, 'use_register');
+  const pass = await bcrypt.hash(password, BCRYPT_COST);
+  if (usersByName.has(key)) fail(409, 'name_taken');
+  const nu = { id: uid(), name, pass, avatar: null, tv: 0, createdAt: Date.now() };
+  if (ADMIN_NAMES.includes(key) || !hasAdmins()) nu.admin = true;
+  if (VERIFIED_NAMES.includes(key)) nu.verified = true;
+  db.users.push(nu); usersById.set(nu.id, nu); usersByName.set(key, nu);
+  saveDB();
+  res.json({ token: signToken(nu), user: pubUser(nu) });
 }));
 
 app.get('/api/me', authOpt, (req, res) => {
@@ -333,6 +400,7 @@ app.patch('/api/me', authNeed, writeLimiter, ...withUploads(upload.single('avata
     if (name.toLowerCase() !== oldKey) {
       if (!NAME_RE.test(name)) fail(400, 'bad_name');
       if (usersByName.has(name.toLowerCase())) fail(409, 'name_taken');
+      if (reservedName(name) && hasAdmins()) fail(403, 'reserved_name'); // нельзя притвориться владельцем
     }
   }
   let newPass = null;
@@ -497,7 +565,7 @@ app.post('/api/posts/:id/comments', authNeed, writeLimiter, (req, res) => {
   if (!text) fail(400, 'empty');
   const c = { id: uid(), postId: p.id, author: req.user.name, authorId: req.user.id, text, createdAt: Date.now() };
   db.comments.push(c); st(p.id).c++; saveDB();
-  res.json(c);
+  res.json({ ...c, badge: badgeOf(req.user) });
 });
 
 app.delete('/api/comments/:id', authNeed, writeLimiter, (req, res) => {
@@ -513,6 +581,7 @@ app.delete('/api/comments/:id', authNeed, writeLimiter, (req, res) => {
 app.get('/api/health', (_req, res) => res.json({
   ok: true, posts: db.posts.length, users: db.users.length,
   uptime: Math.round(process.uptime()),
+  version: ASSET_V,
   storage: { kind: store.kind, source: store.source, mount: MOUNT || null, dataDir: DATA_DIR }
 }));
 
@@ -571,7 +640,7 @@ app.get('/api/threads/:id', authOpt, (req, res) => {
   const t = threadsById.get(req.params.id);
   if (!t) fail(404, 'not_found');
   const replies = db.treplies.filter(r => r.threadId === t.id).sort((a, b) => a.createdAt - b.createdAt)
-    .map(r => ({ ...r, author: usersById.get(r.authorId)?.name || r.author }));
+    .map(r => ({ ...r, author: usersById.get(r.authorId)?.name || r.author, badge: badgeOf(usersById.get(r.authorId)) }));
   res.json({ thread: threadDTO(t, req.user?.id), replies });
 });
 app.post('/api/threads/:id/replies', authNeed, writeLimiter, (req, res) => {
@@ -581,7 +650,7 @@ app.post('/api/threads/:id/replies', authNeed, writeLimiter, (req, res) => {
   if (!text) fail(400, 'empty');
   const r = { id: uid(), threadId: t.id, author: req.user.name, authorId: req.user.id, text, createdAt: Date.now() };
   db.treplies.push(r); t.lastAt = Date.now(); saveDB();
-  res.json({ ...r, author: req.user.name });
+  res.json({ ...r, author: req.user.name, badge: badgeOf(req.user) });
 });
 app.delete('/api/threads/:id', authNeed, writeLimiter, (req, res) => {
   const t = threadsById.get(req.params.id);
@@ -727,7 +796,7 @@ app.get('/api/admin/users', needAdmin, (req, res) => {
     joined: u.createdAt
   })));
 });
-app.post('/api/admin/user/:id/role', needAdmin, (req, res) => {
+app.post('/api/admin/user/:id/role', needAdmin, writeLimiter, (req, res) => {
   const u = usersById.get(req.params.id);
   if (!u) fail(404, 'not_found');
   const b = req.body || {};
@@ -800,7 +869,6 @@ app.delete('/api/admin/reply/:id', needMod, (req, res) => {
 app.get('/api/admin/reports', needMod, (_req, res) => res.json([]));
 
 // ───────────────────────── бот-помощник ─────────────────────────
-const BOT_ID = 'bot';
 const BOT_REPLIES = {
   'привет': 'Привет, {name}! Я AG-бот воркшопа. Напиши /помощь — расскажу, что умею.',
   'здор': 'Здоровец-здарова, {name}! /помощь — список команд.',
@@ -875,10 +943,10 @@ app.post('/api/bot', authNeed, writeLimiter, (req, res) => {
 
 // ───────────────────────── fallback и ошибки ─────────────────────────
 app.use('/api', (_req, res) => res.status(404).json({ error: 'not_found' }));
-// SPA: отдаём index.html только для «страниц», а не для отсутствующих картинок/файлов
+// SPA: любой «путь страницы» отдаёт index.html (без кэша), а файлы — 404
 app.use((req, res, next) => {
   if (req.method !== 'GET' || path.extname(req.path)) return next();
-  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+  serveIndex(req, res);
 });
 app.use((_req, res) => res.status(404).end());
 
@@ -899,21 +967,16 @@ app.use((err, req, res, _next) => {
 let server = null;
 async function boot() {
   await store.init();
+  computeAssetVersion();
   db = await loadDB();
   rebuildIndexes();
-  // роли из ADMIN_NAMES восстанавливаем при каждом старте (даже если их сняли в БД случайно)
-  let fixed = 0;
-  for (const u of db.users) {
-    const k = u.name.toLowerCase();
-    if (BOOT_ADMINS.includes(k) && !u.admin) { u.admin = true; fixed++; }
-    if (BOOT_VERIFIED.includes(k) && !u.verified) { u.verified = true; fixed++; }
-  }
-  if (fixed) console.log('[roles] восстановлено ролей: ' + fixed);
+  // роли никому не выдаём и не снимаем при старте: только панель админа и /api/setup
   await store.save(db); // гарантируем, что данные есть в целевом хранилище
   server = app.listen(PORT, () => {
     console.log('WorkshopAG v5 on :' + PORT);
     console.log('хранилище: ' + store.kind + ' (' + store.source + ')' +
       (store.kind === 'file' && !MOUNT ? '  ⚠ ДАННЫЕ НЕ ПЕРЕЖИВУТ ДЕПЛОЙ — нужна БД или постоянный том' : '  ✓ переживает деплой'));
+    console.log('версия ассетов: ' + ASSET_V);
   });
   server.requestTimeout = 30e3;
   server.headersTimeout = 15e3;

@@ -70,7 +70,8 @@ const ERR = {
   file_too_big: 'Файл слишком большой', only_images: 'Нужна картинка png/jpg/webp/gif', only_json: 'Нужен файл .json',
   bad_json: 'Файл — не корректный JSON', short_title: 'Название слишком короткое', not_found: 'Не найдено',
   not_yours: 'Это не твоё', empty: 'Пусто', server_error: 'Ошибка сервера, попробуй позже', bad_upload: 'Ошибка загрузки файла',
-  too_big: 'Слишком большой запрос', bad_request: 'Так нельзя', bad_reaction: 'Такой реакции нет'
+  too_big: 'Слишком большой запрос', bad_request: 'Так нельзя', bad_reaction: 'Такой реакции нет',
+  reserved_name: 'Этот ник зарезервирован владельцем', use_register: 'Зарегистрируйся как обычно', last_admin: 'Нельзя: это последний админ', not_admin: 'Нужны права'
 };
 const errText = e => ERR[e.message] || (/^http_/.test(e.message) ? 'Ошибка сети (' + e.message.slice(5) + ')' : 'Нет связи с сервером');
 
@@ -363,12 +364,15 @@ async function deletePost(p, d) {
 function commentEl(p, d, c) {
   const el = document.createElement('div'); el.className = 'cm';
   el.innerHTML = '<div class="cmeta"><b>' + nameLink(c.author, c.authorId, c.badge) + '</b><small>' + ago(c.createdAt) + '</small></div><p>' + esc(c.text) + '</p>';
-  if (me && c.authorId === me.id) {
+  if (me && (c.authorId === me.id || canAdmin())) {
     const x = document.createElement('button');
-    x.type = 'button'; x.className = 'cdel icon-btn'; x.innerHTML = ICON.x; x.title = 'Удалить'; x.setAttribute('aria-label', 'Удалить комментарий');
+    x.type = 'button'; x.className = 'cdel icon-btn'; x.innerHTML = ICON.x;
+    x.title = c.authorId === me.id ? 'Удалить' : 'Удалить как модератор';
+    x.setAttribute('aria-label', 'Удалить комментарий');
     x.onclick = async () => {
       try {
-        await api('/api/comments/' + c.id, { method: 'DELETE' });
+        const own = c.authorId === me.id;
+        await api(own ? '/api/comments/' + c.id : '/api/admin/comment/' + c.id, { method: 'DELETE' });
         const list = el.parentNode; el.remove();
         p.comments = Math.max(0, p.comments - 1); paint(d, p);
         if (!list.children.length) list.innerHTML = '<div class="hint noc">Комментариев пока нет</div>';
@@ -473,12 +477,16 @@ async function openThread(id) {
 }
 function threadReplyEl(t, r, list) {
   const el = document.createElement('div'); el.className = 'cm';
-  el.innerHTML = '<div class="cmeta"><b>' + esc(r.author) + '</b><small>' + ago(r.createdAt) + '</small></div><p>' + esc(r.text) + '</p>';
-  if (me && r.authorId === me.id) {
+  el.innerHTML = '<div class="cmeta"><b>' + nameLink(r.author, r.authorId, r.badge) + '</b><small>' + ago(r.createdAt) + '</small></div><p>' + esc(r.text) + '</p>';
+  if (me && (r.authorId === me.id || canAdmin())) {
     const x = document.createElement('button');
-    x.type = 'button'; x.className = 'cdel icon-btn'; x.innerHTML = ICON.x; x.title = 'Удалить'; x.setAttribute('aria-label', 'Удалить ответ');
+    x.type = 'button'; x.className = 'cdel icon-btn'; x.innerHTML = ICON.x;
+    x.title = r.authorId === me.id ? 'Удалить' : 'Удалить как модератор';
+    x.setAttribute('aria-label', 'Удалить ответ');
     x.onclick = async () => {
-      try { await api('/api/treplies/' + r.id, { method: 'DELETE' }); el.remove(); if (!list.children.length) list.innerHTML = '<div class="hint noc">Ответов нет — напиши первым</div>'; }
+      try {
+        const own = r.authorId === me.id;
+        await api(own ? '/api/treplies/' + r.id : '/api/admin/reply/' + r.id, { method: 'DELETE' }); el.remove(); if (!list.children.length) list.innerHTML = '<div class="hint noc">Ответов нет — напиши первым</div>'; }
       catch (e) { toast(errText(e), 'err'); }
     };
     el.querySelector('.cmeta').appendChild(x);
@@ -901,7 +909,7 @@ async function loadMine() {
 async function loadSettings() {
   if (!me) return;
   $('s-name').value = me.name; $('s-prev').src = me.avatar ? url(me.avatar) : 'AG.png';
-  try { const h = await api('/api/health'); $('health').textContent = 'Сервер ок · постов: ' + h.posts + ' · юзеров: ' + h.users; }
+  try { const h = await api('/api/health'); $('health').textContent = 'Сервер ок · v' + (h.version || '?') + ' · постов: ' + h.posts + ' · юзеров: ' + h.users; }
   catch (_) { $('health').textContent = 'Сервер недоступен'; }
 }
 async function saveSettings() {
