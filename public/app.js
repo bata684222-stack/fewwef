@@ -243,7 +243,8 @@ function card(p) {
     '<div class="cbody"><h4 class="ctitle">' + esc(p.title) + '</h4>' + (p.body ? '<div class="ctext">' + esc(p.body) + '</div>' : '') + '</div>' +
     (p.photo ? '<img class="main" loading="lazy" decoding="async" src="' + esc(url(p.photo)) + '" alt="' + esc(p.title) + '">' : '') +
     (p.jsonUrl ? '<div class="jsonbox">' + ICON.file + '<span class="jn">' + esc(p.jsonName || 'чертёж.json') + '</span>' +
-      '<a class="btn small" href="' + esc(url(p.jsonUrl)) + '" download="' + esc(p.jsonName || 'build.json') + '">' + ICON.download + 'Скачать</a></div>' : '') +
+      '<span class="dls" title="Скачали">' + ICON.download + '<span>' + (p.downloads || 0) + '</span></span>' +
+      '<a class="btn small dl" href="' + esc(url(p.jsonUrl)) + '" download="' + esc(p.jsonName || 'build.json') + '">' + ICON.download + 'Скачать</a></div>' : '') +
     '<div class="actions">' +
       '<button class="chip like" type="button" aria-label="Нравится">' + ICON.like + '<span></span></button>' +
       '<button class="chip dis" type="button" aria-label="Не нравится">' + ICON.dislike + '<span></span></button>' +
@@ -276,8 +277,24 @@ function card(p) {
   inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sendComment(p, d, inp, sendB); } });
   const del = d.querySelector('.del');
   if (del) del.onclick = () => deletePost(p, d);
+  const dl = d.querySelector('a.dl');
+  if (dl) dl.addEventListener('click', () => countDownload(p, d));
   viewObs.observe(d);
   return d;
+}
+
+// ───────── скачивания: один раз за сессию ─────────
+const seenDl = (() => { try { return new Set(JSON.parse(sessionStorage.getItem('wsa_dl') || '[]')); } catch (_) { return new Set(); } })();
+async function countDownload(p, d) {
+  if (seenDl.has(p.id)) return;
+  seenDl.add(p.id);
+  try { sessionStorage.setItem('wsa_dl', JSON.stringify([...seenDl].slice(-500))); } catch (_) {}
+  try {
+    const r = await api('/api/posts/' + p.id + '/download', { method: 'POST' });
+    p.downloads = r.downloads;
+    const s = d.querySelector('.dls span:last-child');
+    if (s) s.textContent = r.downloads;
+  } catch (_) { seenDl.delete(p.id); }
 }
 function pop(b) { b.classList.add('pop'); setTimeout(() => b.classList.remove('pop'), 320); }
 

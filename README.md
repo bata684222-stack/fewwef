@@ -79,6 +79,7 @@ npm start
 - Личка: `GET /api/users?q=` (поиск акков), `GET /api/dm` (диалоги), `GET /api/dm/unread`, `GET/POST /api/dm/:uid`
 - Профили: `GET /api/users/:id` (посты, лайки, подписчики, `follows`, счётчик просмотров), `POST /api/users/:id/follow` — переключить подписку
 - Просмотры: `POST /api/posts/:id/view` (+1 к посту; просмотры чужого профиля растут сами при открытии)
+- Скачивания чертежа: `POST /api/posts/:id/download` → `{ downloads }` (счётчик виден у кнопки «Скачать»)
 - Рассылка: `GET /api/broadcasts` — последние 10 объявлений
 - Админка: `GET /api/admin/stats`, `GET /api/admin/users?q=`, `POST /api/admin/user/:id/role {admin,mod,verified}`, `DELETE /api/admin/user/:id`, `POST /api/admin/broadcast {text}`, `DELETE /api/admin/broadcast/:id`, `DELETE /api/admin/{post|comment|thread|reply}/:id`
 - Бот: `POST /api/bot {text}` → `{ reply }`

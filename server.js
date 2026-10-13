@@ -317,7 +317,7 @@ function postDTO(p, viewerId) {
     ...p,
     author: a ? a.name : p.author,           // всегда актуальные ник/аватар
     avatar: a ? a.avatar || null : null,
-    likes: s.l, dislikes: s.d, comments: s.c, views: p.views || 0,
+    likes: s.l, dislikes: s.d, comments: s.c, views: p.views || 0, downloads: p.downloads || 0,
     reactions: s.r, myReactions: mine,
     authorBadge: badgeOf(a),
     myVote: viewerId ? (db.votes[p.id + ':' + viewerId] || 0) : 0
@@ -573,6 +573,15 @@ app.post('/api/posts/:id/view', authOpt, (req, res) => {
   p.views = (p.views || 0) + 1;
   saveDB();
   res.json({ views: p.views });
+});
+
+// скачивание чертежа: +1 (фронт шлёт один раз за сессию)
+app.post('/api/posts/:id/download', authOpt, (req, res) => {
+  const p = postsById.get(req.params.id);
+  if (!p || !p.jsonUrl) fail(404, 'not_found');
+  p.downloads = (p.downloads || 0) + 1;
+  saveDB();
+  res.json({ downloads: p.downloads });
 });
 
 // ───────────────────────── комментарии ─────────────────────────
