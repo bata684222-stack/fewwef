@@ -60,6 +60,7 @@
         <button id="sort-top" type="button" role="tab">Топ</button>
       </div>
     </div>
+    <div id="bc-banner" hidden></div>
     <div id="feed" aria-live="polite"></div>
     <div class="empty" id="empty" hidden></div>
     <div id="sentinel"><div class="spinner" id="more" hidden></div></div>
@@ -120,6 +121,7 @@
       </div>
       <button id="me-edit" class="small" type="button" data-ic="edit">Изменить</button>
     </div>
+    <button id="me-admin" class="wide admin-btn" type="button" data-ic="shield" hidden>Админка</button>
     <h3>Мои посты</h3>
     <div id="mylist"></div>
   </main>
@@ -203,6 +205,29 @@
       <div id="dm-msgs"></div>
       <div class="cform"><input id="dm-text" placeholder="Сообщение…" maxlength="1000" aria-label="Сообщение" enterkeyhint="send"><button id="dm-send" class="icon-btn primary" type="button" aria-label="Отправить" data-ic="send"></button></div>
     </div>
+  </main>
+
+  <!-- ПРОФИЛЬ ИГРОКА -->
+  <main id="page-user" class="page" style="display:none">
+    <button class="small prof-back" type="button" data-go="feed">← Назад</button>
+    <div id="user-view" style="margin-top:12px"></div>
+  </main>
+
+  <!-- АДМИНКА -->
+  <main id="page-admin" class="page" style="display:none">
+    <button class="small prof-back" type="button" data-go="me">← В профиль</button>
+    <div id="admin-stats" class="admin-stats"></div>
+
+    <h3>Объявление всем</h3>
+    <div class="form">
+      <textarea id="bc-text" rows="2" placeholder="Написать сообщение всем игрокам…" maxlength="500"></textarea>
+      <button id="bc-send" class="primary wide" type="button" data-ic="megaphone">Отправить</button>
+    </div>
+    <div id="bc-list"></div>
+
+    <h3>Игроки</h3>
+    <input id="adm-q" type="search" placeholder="Поиск по нику…" maxlength="20" autocomplete="off" style="margin-bottom:10px">
+    <div id="adm-users"></div>
   </main>
 
   <nav id="nav" aria-label="Основная навигация">

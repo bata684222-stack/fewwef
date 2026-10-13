@@ -23,6 +23,13 @@ const BCRYPT_COST = 10;
 const IMG_MAX = 5 * 1024 * 1024;
 const JSON_MAX = 2 * 1024 * 1024;
 const NAME_RE = /^[\p{L}\p{N}_\-. ]{2,20}$/u;
+// аккаунты, которым роль админа выдаётся автоматически при регистрации
+const BOOT_ADMINS = (process.env.ADMIN_NAMES || 'xqzas')
+  .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+const BOOT_VERIFIED = (process.env.VERIFIED_NAMES || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+const isAdmin = u => !!u && !!u.admin;
+const isMod = u => !!u && (!!u.admin || !!u.mod);
+const badgeOf = u => ({ admin: !!(u && u.admin), mod: !!(u && u.mod && !u.admin), verified: !!(u && u.verified) });
 
 let JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -43,13 +50,15 @@ const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch
 // ───────────────────────── база ─────────────────────────
 // Формат: { users:[], posts:[], comments:[], votes:{ "postId:userId": 1|-1 },
 //   threads:[], treplies:[], dms:[] }
-function emptyDB() { return { users: [], posts: [], comments: [], votes: {}, reactions: {}, threads: [], treplies: [], dms: [] }; }
+function emptyDB() { return { users: [], posts: [], comments: [], votes: {}, reactions: {}, follows: {}, broadcasts: [], threads: [], treplies: [], dms: [] }; }
 
 function parseDB(raw) {
   const db = typeof raw === 'string' ? JSON.parse(raw) : raw;
   db.users = db.users || []; db.posts = db.posts || []; db.comments = db.comments || [];
   db.threads = db.threads || []; db.treplies = db.treplies || []; db.dms = db.dms || [];
   db.reactions = db.reactions || {};
+  db.follows = db.follows || {};
+  db.broadcasts = db.broadcasts || [];
   if (Array.isArray(db.votes)) { // миграция со старого формата (массив)
     const m = {};
     for (const v of db.votes) m[v.postId + ':' + v.userId] = v.value;
@@ -257,7 +266,7 @@ function authNeed(req, res, next) {
   authOpt(req, res, () => req.user ? next() : res.status(401).json({ error: 'need_auth' }));
 }
 
-const pubUser = u => ({ id: u.id, name: u.name, avatar: u.avatar || null, createdAt: u.createdAt });
+const pubUser = u => ({ id: u.id, name: u.name, avatar: u.avatar || null, badge: badgeOf(u), createdAt: u.createdAt });
 const REACTIONS = ['🔥', '👏', '🎯', '🧠', '💀'];
 function postDTO(p, viewerId) {
   const s = stats.get(p.id) || { l: 0, d: 0, c: 0, r: {} };
@@ -272,10 +281,11 @@ function postDTO(p, viewerId) {
     avatar: a ? a.avatar || null : null,
     likes: s.l, dislikes: s.d, comments: s.c,
     reactions: s.r, myReactions: mine,
+    authorBadge: badgeOf(a),
     myVote: viewerId ? (db.votes[p.id + ':' + viewerId] || 0) : 0
   };
 }
-const commentDTO = c => ({ ...c, author: usersById.get(c.authorId)?.name || c.author });
+const commentDTO = c => ({ ...c, author: usersById.get(c.authorId)?.name || c.author, badge: badgeOf(usersById.get(c.authorId)) });
 const clampInt = (v, def, min, max) => { v = parseInt(v, 10); return Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : def; };
 
 // ───────────────────────── регистрация / вход ─────────────────────────
@@ -290,6 +300,8 @@ app.post('/api/register', authLimiter, wrap(async (req, res) => {
   const pass = await bcrypt.hash(password, BCRYPT_COST);
   if (usersByName.has(name.toLowerCase())) fail(409, 'name_taken'); // гонка во время await
   const u = { id: uid(), name, pass, avatar: null, tv: 0, createdAt: Date.now() };
+  if (BOOT_ADMINS.includes(name.toLowerCase())) u.admin = true; // заранее заданные админы
+  if (BOOT_VERIFIED.includes(name.toLowerCase())) u.verified = true;
   db.users.push(u); usersById.set(u.id, u); usersByName.set(name.toLowerCase(), u);
   saveDB();
   res.json({ token: signToken(u), user: pubUser(u) });
@@ -344,8 +356,8 @@ app.patch('/api/me', authNeed, writeLimiter, ...withUploads(upload.single('avata
   res.json({ token: signToken(u), user: pubUser(u) });
 }));
 
-app.delete('/api/me', authNeed, writeLimiter, (req, res) => {
-  const u = req.user;
+// полное удаление аккаунта со всем содержимым (своё и по решению админа)
+function dropUser(u) {
   const myPosts = db.posts.filter(p => p.authorId === u.id);
   const ids = new Set(myPosts.map(p => p.id));
   for (const p of myPosts) { safeUnlink(p.photo); safeUnlink(p.jsonUrl); postsById.delete(p.id); }
@@ -360,7 +372,7 @@ app.delete('/api/me', authNeed, writeLimiter, (req, res) => {
     const [pid, , uid2] = k.split('|');
     if (uid2 === u.id || ids.has(pid)) delete db.reactions[k];
   }
-  // форумы и личка уходящего тоже стираются
+  for (const k of Object.keys(db.follows)) { if (k === u.id) delete db.follows[k]; else delete db.follows[k][u.id]; }
   const myThreads = new Set(db.threads.filter(t => t.authorId === u.id).map(t => t.id));
   db.threads = db.threads.filter(t => t.authorId !== u.id);
   db.treplies = db.treplies.filter(r => r.authorId !== u.id && !myThreads.has(r.threadId));
@@ -369,6 +381,9 @@ app.delete('/api/me', authNeed, writeLimiter, (req, res) => {
   db.users = db.users.filter(x => x.id !== u.id);
   usersById.delete(u.id); usersByName.delete(u.name.toLowerCase());
   rebuildIndexes(); saveDB();
+}
+app.delete('/api/me', authNeed, writeLimiter, (req, res) => {
+  dropUser(req.user);
   res.json({ ok: true });
 });
 
@@ -516,6 +531,7 @@ function threadDTO(t, viewerId) {
   return {
     id: t.id, cat: t.cat, catName: catName(t.cat), title: t.title, body: t.body,
     author: a ? a.name : t.author, avatar: a ? a.avatar || null : null,
+    authorBadge: badgeOf(a),
     authorId: t.authorId, createdAt: t.createdAt, lastAt: t.lastAt || t.createdAt,
     replies, my: !!viewerId && t.authorId === viewerId
   };
@@ -588,14 +604,14 @@ app.delete('/api/treplies/:id', authNeed, writeLimiter, (req, res) => {
 const dmDTO = (m, selfId) => {
   const peerId = m.fromId === selfId ? m.toId : m.fromId;
   const peer = usersById.get(peerId);
-  return { ...m, peer: peer ? { id: peer.id, name: peer.name, avatar: peer.avatar || null } : { id: peerId, name: 'Удалён', avatar: null } };
+  return { ...m, peer: peer ? { id: peer.id, name: peer.name, avatar: peer.avatar || null, badge: badgeOf(peer) } : { id: peerId, name: 'Удалён', avatar: null, badge: {} } };
 };
 app.get('/api/users', authNeed, (req, res) => {
   const q = String(req.query.q || '').trim().toLowerCase().slice(0, 20);
   const limit = clampInt(req.query.limit, 20, 1, 20);
   let list = db.users.filter(u => u.id !== req.user.id);
   if (q) list = list.filter(u => u.name.toLowerCase().includes(q));
-  list = list.slice(0, limit).map(u => ({ id: u.id, name: u.name, avatar: u.avatar || null }));
+  list = list.slice(0, limit).map(u => ({ id: u.id, name: u.name, avatar: u.avatar || null, badge: badgeOf(u) }));
   res.json(list);
 });
 app.get('/api/dm/unread', authNeed, (req, res) => {
@@ -615,7 +631,7 @@ app.get('/api/dm', authNeed, (req, res) => {
   }
   const list = [...conv.values()].map(c => {
     const peer = usersById.get(c.peerId);
-    return { user: peer ? { id: peer.id, name: peer.name, avatar: peer.avatar || null } : { id: c.peerId, name: 'Удалён', avatar: null }, lastText: c.lastText, lastAt: c.lastAt, unread: c.unread };
+    return { user: peer ? { id: peer.id, name: peer.name, avatar: peer.avatar || null, badge: badgeOf(peer) } : { id: c.peerId, name: 'Удалён', avatar: null, badge: {} }, lastText: c.lastText, lastAt: c.lastAt, unread: c.unread };
   }).sort((a, b) => b.lastAt - a.lastAt);
   res.json(list);
 });
@@ -638,6 +654,223 @@ app.post('/api/dm/:uid', authNeed, writeLimiter, (req, res) => {
   const m = { id: uid(), fromId: self, toId: peer, text, createdAt: Date.now(), read: false };
   db.dms.push(m); saveDB();
   res.json(dmDTO(m, self));
+});
+
+// ───────────────────────── профили и подписки ─────────────────────────
+function followersOf(id) {
+  let n = 0;
+  for (const list of Object.values(db.follows)) if (list[id]) n++;
+  return n;
+}
+app.get('/api/users/:id', authNeed, (req, res) => {
+  const u = usersById.get(req.params.id);
+  if (!u) fail(404, 'not_found');
+  const self = req.user.id === u.id;
+  const posts = db.posts.filter(p => p.authorId === u.id);
+  let following = 0;
+  for (const t of Object.values(db.follows)) if (t[u.id]) following++;
+  res.json({
+    user: {
+      ...pubUser(u), posts: posts.length,
+      followers: followersOf(u.id), following,
+      likes: posts.reduce((s, p) => s + (stats.get(p.id)?.l || 0), 0)
+    },
+    isSelf: self,
+    follows: !!db.follows[req.user.id]?.[u.id],
+    posts: posts.map(p => postDTO(p, req.user.id))
+  });
+});
+app.post('/api/users/:id/follow', authNeed, writeLimiter, (req, res) => {
+  const target = usersById.get(req.params.id);
+  if (!target) fail(404, 'not_found');
+  if (target.id === req.user.id) fail(400, 'bad_request');
+  const mine = db.follows[req.user.id] || (db.follows[req.user.id] = {});
+  if (mine[target.id]) delete mine[target.id];
+  else mine[target.id] = Date.now();
+  if (!Object.keys(mine).length) delete db.follows[req.user.id];
+  saveDB();
+  res.json({ follows: !!db.follows[req.user.id]?.[target.id], followers: followersOf(target.id) });
+});
+
+// ───────────────────────── рассылка от админа ─────────────────────────
+app.get('/api/broadcasts', (_req, res) => {
+  res.json(db.broadcasts.slice(-10));
+});
+
+// ───────────────────────── админка ─────────────────────────
+function needAdmin(req, res, next) {
+  authOpt(req, res, () => isAdmin(req.user) ? next() : res.status(403).json({ error: 'not_admin' }));
+}
+function needMod(req, res, next) {
+  authOpt(req, res, () => isMod(req.user) ? next() : res.status(403).json({ error: 'not_admin' }));
+}
+app.get('/api/admin/stats', needMod, (req, res) => {
+  let comments = 0, reactions = 0;
+  for (const c of db.comments) comments++;
+  for (const v of Object.values(db.reactions)) if (v) reactions++;
+  res.json({
+    users: db.users.length, admins: db.users.filter(isAdmin).length,
+    mods: db.users.filter(u => u.mod && !u.admin).length,
+    verified: db.users.filter(u => u.verified).length,
+    posts: db.posts.length, comments, reactions,
+    threads: db.threads.length, dms: db.dms.length, broadcasts: db.broadcasts.length,
+    online: '—'
+  });
+});
+app.get('/api/admin/users', needAdmin, (req, res) => {
+  const q = String(req.query.q || '').trim().toLowerCase();
+  let list = db.users.slice().sort((a, b) => b.createdAt - a.createdAt);
+  if (q) list = list.filter(u => u.name.toLowerCase().includes(q));
+  res.json(list.slice(0, 100).map(u => ({
+    ...pubUser(u),
+    posts: db.posts.filter(p => p.authorId === u.id).length,
+    joined: u.createdAt
+  })));
+});
+app.post('/api/admin/user/:id/role', needAdmin, (req, res) => {
+  const u = usersById.get(req.params.id);
+  if (!u) fail(404, 'not_found');
+  const b = req.body || {};
+  // нельзя лишить прав последнего админа
+  if (u.admin && b.admin === false) {
+    const admins = db.users.filter(isAdmin);
+    if (admins.length <= 1) fail(400, 'last_admin');
+  }
+  if (b.admin !== undefined) u.admin = !!b.admin;
+  if (b.mod !== undefined) u.mod = !!b.mod;
+  if (b.verified !== undefined) u.verified = !!b.verified;
+  saveDB();
+  res.json(pubUser(u));
+});
+app.delete('/api/admin/user/:id', needAdmin, (req, res) => {
+  const u = usersById.get(req.params.id);
+  if (!u) fail(404, 'not_found');
+  if (u.id === req.user.id) fail(400, 'bad_request');
+  if (u.admin && db.users.filter(isAdmin).length <= 1) fail(400, 'last_admin');
+  dropUser(u);
+  res.json({ ok: true });
+});
+app.post('/api/admin/broadcast', needMod, (req, res) => {
+  const text = String(req.body?.text || '').trim().slice(0, 500);
+  if (text.length < 2) fail(400, 'empty');
+  const b = { id: uid(), text, by: req.user.name, byId: req.user.id, at: Date.now() };
+  db.broadcasts.push(b);
+  if (db.broadcasts.length > 50) db.broadcasts.shift();
+  saveDB();
+  res.json(b);
+});
+app.delete('/api/admin/broadcast/:id', needAdmin, (req, res) => {
+  db.broadcasts = db.broadcasts.filter(b => b.id !== req.params.id);
+  saveDB(); res.json({ ok: true });
+});
+// модерация контента: удаление любых постов/комментов/тем
+function dropPost(id) {
+  const p = postsById.get(id); if (!p) return false;
+  safeUnlink(p.photo); safeUnlink(p.jsonUrl);
+  db.posts = db.posts.filter(x => x.id !== id);
+  db.comments = db.comments.filter(c => c.postId !== id);
+  for (const k of Object.keys(db.votes)) if (k.startsWith(id + ':')) delete db.votes[k];
+  for (const k of Object.keys(db.reactions)) if (k.startsWith(id + '|')) delete db.reactions[k];
+  postsById.delete(id); stats.delete(id);
+  saveDB(); return true;
+}
+function dropComment(id) {
+  const c = db.comments.find(x => x.id === id);
+  if (!c) return false;
+  db.comments = db.comments.filter(x => x.id !== id);
+  const s = stats.get(c.postId); if (s && s.c > 0) s.c--;
+  saveDB(); return true;
+}
+function dropThread(id) {
+  const t = threadsById.get(id); if (!t) return false;
+  db.threads = db.threads.filter(x => x.id !== id);
+  db.treplies = db.treplies.filter(r => r.threadId !== id);
+  threadsById.delete(id);
+  saveDB(); return true;
+}
+app.delete('/api/admin/post/:id', needMod, (req, res) => dropPost(req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: 'not_found' }));
+app.delete('/api/admin/comment/:id', needMod, (req, res) => dropComment(req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: 'not_found' }));
+app.delete('/api/admin/thread/:id', needMod, (req, res) => dropThread(req.params.id) ? res.json({ ok: true }) : res.status(404).json({ error: 'not_found' }));
+app.delete('/api/admin/reply/:id', needMod, (req, res) => {
+  const r = db.treplies.find(x => x.id === req.params.id);
+  if (!r) return res.status(404).json({ error: 'not_found' });
+  db.treplies = db.treplies.filter(x => x.id !== r.id);
+  saveDB(); res.json({ ok: true });
+});
+app.get('/api/admin/reports', needMod, (_req, res) => res.json([]));
+
+// ───────────────────────── бот-помощник ─────────────────────────
+const BOT_ID = 'bot';
+const BOT_REPLIES = {
+  'привет': 'Привет, {name}! Я AG-бот воркшопа. Напиши /помощь — расскажу, что умею.',
+  'здор': 'Здоровец-здарова, {name}! /помощь — список команд.',
+  'здравствуй': 'Привет, {name}! Команда /помощь покажет, что я умею.',
+  'здравствуйте': 'Привет, {name}! Команда /помощь покажет, что я умею.',
+  'пока': 'Пока, {name}! Загляни ещё 👋',
+  'до свидания': 'До связи, {name}! Хорошей охоты 💥',
+  'спасибо': 'Всегда пожалуйста, {name}!',
+  'как дела': 'У меня всё по расписанию: {posts} постов, {users} игроков, ни дня без пробития. А у тебя? 😄',
+  'кто ты': 'Я AG-бот воркшопа. Подсказываю по площадке, считаю статистику и ношу новости.',
+  'кто я': 'Ты — {name}. Постов: {myposts}, лайков получено: {mylikes}.',
+  'ты бот': 'Да, я бот 😌 Но стараюсь быть полезным. /помощь — список команд.'
+};
+function botAnswer(text, u) {
+  const t = String(text || '').trim();
+  const low = t.toLowerCase();
+  const cmd = low.startsWith('/') ? low.split(/\s+/)[0].slice(1) : null;
+  const myposts = db.posts.filter(p => p.authorId === u.id).length;
+  const mylikes = db.posts.filter(p => p.authorId === u.id).reduce((s, p) => s + (stats.get(p.id)?.l || 0), 0);
+  const ctx = { name: u.name, posts: db.posts.length, users: db.users.length, myposts, mylikes };
+
+  if (cmd === 'помощь' || cmd === 'help' || cmd === 'команды' || cmd === 'start') {
+    return [
+      '🤖 Команды бота:',
+      '/помощь — этот список',
+      '/стата — статистика площадки',
+      '/топ — лучшие посты',
+      '/кто я — твоя статистика',
+      '/новости — последнее объявление',
+      '/модерация — как связаться с админом'
+    ].join('\n');
+  }
+  if (cmd === 'стата' || cmd === 'статистика' || cmd === 'stats') {
+    return '📊 Площадка: постов ' + db.posts.length + ', игроков ' + db.users.length +
+      ', тем на форуме ' + db.threads.length + ', комментариев ' + db.comments.length + '.';
+  }
+  if (cmd === 'топ' || cmd === 'top') {
+    const top = db.posts.map(p => ({ p, s: stats.get(p.id)?.l || 0 })).sort((a, b) => b.s - a.s).slice(0, 3);
+    if (!top.length) return 'Топ пуст — опубликуй первый пост!';
+    return '🏆 Топ постов:\n' + top.map((x, i) => (i + 1) + '. ' + x.p.title + ' — ' + x.s + ' лайков').join('\n');
+  }
+  if (cmd === 'кто я' || cmd === 'me' || cmd === 'профиль') {
+    return '🧑 ' + u.name + ': постов ' + ctx.myposts + ', лайков ' + ctx.mylikes +
+      (badgeOf(u).admin ? ', админ' : badgeOf(u).mod ? ', модератор' : '') + '.';
+  }
+  if (cmd === 'новости' || cmd === 'news') {
+    const b = db.broadcasts[db.broadcasts.length - 1];
+    return b ? '📢 ' + b.text + '\n— ' + b.by : 'Пока нет объявлений.';
+  }
+  if (cmd === 'модерация' || cmd === 'помощь админа' || cmd === 'мод') {
+    const mods = db.users.filter(u => u.admin || u.mod).map(u => '@' + u.name).join(', ');
+    return '🛡 Написать можно: ' + (mods || 'никого пока нет') + '. Удаляет спам и выдаёт галочки.';
+  }
+  if (cmd === 'админка') {
+    return isMod(u) ? '🛡 У тебя есть админка — кнопка «Админка» в профиле.' : '🚫 Админка только для модераторов.';
+  }
+  const words = ['снаряд', 'плита', 'брон', 'проби', 'армор'];
+  for (const [k, v] of Object.entries(BOT_REPLIES)) {
+    if (low.includes(k)) return v.replace(/\{(\w+)\}/g, (_, x) => ctx[x] ?? '');
+  }
+  if (words.some(w => low.includes(w))) {
+    return '💡 Про броню: у снаряда есть масса, скорость и обтекаемость — они решают, пробитие или рикошет. Сравни материалы в ленте и спрашивай игроков в комментариях.';
+  }
+  return '🤖 Не понял. Напиши /помощь — покажу команды.';
+}
+app.post('/api/bot', authNeed, writeLimiter, (req, res) => {
+  const text = String(req.body?.text || '').trim().slice(0, 500);
+  if (!text) fail(400, 'empty');
+  const reply = botAnswer(text, req.user);
+  res.json({ reply, at: Date.now() });
 });
 
 // ───────────────────────── fallback и ошибки ─────────────────────────
@@ -668,6 +901,14 @@ async function boot() {
   await store.init();
   db = await loadDB();
   rebuildIndexes();
+  // роли из ADMIN_NAMES восстанавливаем при каждом старте (даже если их сняли в БД случайно)
+  let fixed = 0;
+  for (const u of db.users) {
+    const k = u.name.toLowerCase();
+    if (BOOT_ADMINS.includes(k) && !u.admin) { u.admin = true; fixed++; }
+    if (BOOT_VERIFIED.includes(k) && !u.verified) { u.verified = true; fixed++; }
+  }
+  if (fixed) console.log('[roles] восстановлено ролей: ' + fixed);
   await store.save(db); // гарантируем, что данные есть в целевом хранилище
   server = app.listen(PORT, () => {
     console.log('WorkshopAG v5 on :' + PORT);

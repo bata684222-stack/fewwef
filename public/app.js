@@ -37,6 +37,16 @@ const ICON = {
   home: IC('<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>'),
   forum: IC('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
   mail: IC('<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>'),
+  check: IC('<polyline points="20 6 9 17 4 12"/>'),
+  shield: IC('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>'),
+  shieldCheck: IC('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15.5 9.5"/>'),
+  crown: IC('<path d="M3 18h18l-1.6-9-4.4 3L12 5 8 12 3.6 9z"/><line x1="3" y1="21" x2="21" y2="21"/>'),
+  bot: IC('<rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 4v4"/><circle cx="9" cy="14" r="1.2"/><circle cx="15" cy="14" r="1.2"/><line x1="2" y1="13" x2="4" y2="13"/><line x1="20" y1="13" x2="22" y2="13"/>'),
+  users: IC('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'),
+  userPlus: IC('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>'),
+  megaphone: IC('<path d="M3 11l15-6v14L3 13z"/><path d="M3 11v2a2 2 0 0 0 2 2h1v3a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-4"/>'),
+  back: IC('<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>'),
+  bell: IC('<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>'),
   plus: IC('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>'),
   user: IC('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'),
   gear: IC('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>')
@@ -134,24 +144,26 @@ function bindEye(btnId, inputId) {
 }
 
 // ───────── навигация ─────────
-const PAGES = [['nav-feed', 'feed'], ['nav-forum', 'forum'], ['nav-add', 'add'], ['nav-dm', 'dm'], ['nav-me', 'me'], ['nav-set', 'set']];
+const PAGES = [['nav-feed', 'feed'], ['nav-forum', 'forum'], ['nav-add', 'add'], ['nav-dm', 'dm'], ['nav-me', 'me'], ['nav-set', 'set'], ['nav-user', 'user'], ['nav-admin', 'admin']];
 function nav(p) {
   if (p === 'feed' && curPage === 'feed') { window.scrollTo({ top: 0, behavior: 'smooth' }); load(); return; }
   curPage = p;
   $('page-thread').style.display = p === 'thread' ? 'block' : 'none';
   for (const [id, pg] of PAGES) {
     const page = $('page-' + pg), b = $(id), on = pg === p;
+    if (!page) continue;
     page.style.display = on ? 'block' : 'none';
-    b.classList.toggle('on', on);
-    if (on) { b.setAttribute('aria-current', 'page'); page.classList.remove('fade'); void page.offsetWidth; page.classList.add('fade'); }
-    else b.removeAttribute('aria-current');
+    b?.classList.toggle('on', on);
+    if (on) { b?.setAttribute('aria-current', 'page'); page.classList.remove('fade'); void page.offsetWidth; page.classList.add('fade'); }
+    else b?.removeAttribute('aria-current');
   }
-  if (p === 'feed' && feedDirty) { feedDirty = false; load(); }
+  if (p === 'feed' && feedDirty) { feedDirty = false; load(); loadBroadcast(); }
   if (p === 'forum' && !forumCats.length) loadForums();
   else if (p === 'forum') loadThreads();
-  if (p === 'dm') { dmToList(); loadConvos(); pollUnread(); }
+  if (p === 'dm') { dmToList(); botChat = null; loadConvos(); pollUnread(); }
   if (p === 'me') loadMine();
   if (p === 'set') loadSettings();
+  if (p === 'admin') loadAdmin();
   window.scrollTo({ top: 0 });
 }
 
@@ -213,9 +225,10 @@ function card(p) {
   const d = document.createElement('article');
   d.className = 'card'; d.dataset.id = p.id;
   const own = me && p.authorId === me.id;
+  const canDel = own || canAdmin();
   d.innerHTML =
     '<div class="chead"><img class="ava" src="' + (p.avatar ? esc(url(p.avatar)) : 'AG.png') + '" alt="" width="40" height="40" loading="lazy">' +
-      '<div class="who"><b>' + esc(p.author) + '</b><small title="' + esc(new Date(p.createdAt).toLocaleString('ru-RU')) + '">' + ago(p.createdAt) + '</small></div>' +
+      '<div class="who"><b>' + nameLink(p.author, p.authorId, p.authorBadge) + '</b><small title="' + esc(new Date(p.createdAt).toLocaleString('ru-RU')) + '">' + ago(p.createdAt) + '</small></div>' +
       '<span class="tag">' + (p.kind === 'build' ? 'ПОСТРОЙКА' : 'СНАРЯД') + '</span></div>' +
     '<div class="cbody"><h4 class="ctitle">' + esc(p.title) + '</h4>' + (p.body ? '<div class="ctext">' + esc(p.body) + '</div>' : '') + '</div>' +
     (p.photo ? '<img class="main" loading="lazy" decoding="async" src="' + esc(url(p.photo)) + '" alt="' + esc(p.title) + '">' : '') +
@@ -226,7 +239,7 @@ function card(p) {
       '<button class="chip dis" type="button" aria-label="Не нравится">' + ICON.dislike + '<span></span></button>' +
       '<button class="chip cmtb" type="button" aria-label="Комментарии">' + ICON.cmt + '<span></span></button>' +
       '<span class="spacer"></span><span class="score"></span>' +
-      (own ? '<button class="icon-btn del" type="button" title="Удалить пост" aria-label="Удалить пост">' + ICON.trash + '</button>' : '') +
+      (canDel ? '<button class="icon-btn del" type="button" title="' + (own ? 'Удалить пост' : 'Удалить как модератор') + '" aria-label="Удалить пост">' + ICON.trash + '</button>' : '') +
     '</div>' +
     '<div class="react" aria-label="Реакции"></div>' +
     '<div class="comments" hidden><div class="clist"></div>' +
@@ -337,18 +350,19 @@ async function vote(p, d, value) { // мгновенно, без перерис�
 async function deletePost(p, d) {
   if (!confirm('Удалить пост «' + p.title + '»?')) return;
   try {
-    await api('/api/posts/' + p.id, { method: 'DELETE' });
+    const own = me && p.authorId === me.id;
+    await api(own ? '/api/posts/' + p.id : '/api/admin/post/' + p.id, { method: 'DELETE' });
     d.classList.add('gone');
     setTimeout(() => { d.remove(); if (curPage === 'me') loadMine(); else emptyIfNeeded(); }, 250);
     feedDirty = curPage !== 'feed'; if (curPage === 'feed') feed.total--, $('count').textContent = 'Постов: ' + Math.max(0, feed.total);
-    toast('Пост удалён', 'ok');
+    toast(own ? 'Пост удалён' : 'Удалено модератором', 'ok');
   } catch (e) { toast(errText(e), 'err'); }
 }
 
 // ───────── комментарии ─────────
 function commentEl(p, d, c) {
   const el = document.createElement('div'); el.className = 'cm';
-  el.innerHTML = '<div class="cmeta"><b>' + esc(c.author) + '</b><small>' + ago(c.createdAt) + '</small></div><p>' + esc(c.text) + '</p>';
+  el.innerHTML = '<div class="cmeta"><b>' + nameLink(c.author, c.authorId, c.badge) + '</b><small>' + ago(c.createdAt) + '</small></div><p>' + esc(c.text) + '</p>';
   if (me && c.authorId === me.id) {
     const x = document.createElement('button');
     x.type = 'button'; x.className = 'cdel icon-btn'; x.innerHTML = ICON.x; x.title = 'Удалить'; x.setAttribute('aria-label', 'Удалить комментарий');
@@ -492,20 +506,21 @@ async function pollUnread() {
   } catch (_) {}
 }
 function dmToList() {
-  dmPeer = null; $('dm-list-view').hidden = false; $('dm-chat-view').hidden = true;
+  dmPeer = null; botChat = null; $('dm-list-view').hidden = false; $('dm-chat-view').hidden = true;
 }
 async function loadConvos() {
   const box = $('dm-convos'); box.replaceChildren(); $('dm-empty').hidden = true;
   try {
     const list = await api('/api/dm');
-    if (!list.length) { const e = $('dm-empty'); e.innerHTML = ICON.mail + '<b>Диалогов нет</b><span>Найди человека выше и напиши первым</span>'; e.hidden = false; return; }
+    if (!list.length) { const e = $('dm-empty'); e.innerHTML = ICON.mail + '<b>Диалогов нет</b><span>Найди человека выше и напиши первым</span>'; e.hidden = false; }
     for (const c of list) {
       const d = document.createElement('div'); d.className = 'convo';
-      d.innerHTML = '<img src="' + (c.user.avatar ? esc(url(c.user.avatar)) : 'AG.png') + '" alt="" loading="lazy"><div class="cinfo"><b>' + esc(c.user.name) + '</b><div class="clast">' + esc(c.lastText) + '</div></div>' +
+      d.innerHTML = '<img src="' + (c.user.avatar ? esc(url(c.user.avatar)) : 'AG.png') + '" alt="" loading="lazy"><div class="cinfo"><b>' + nameLink(c.user.name, c.user.id, c.user.badge) + '</b><div class="clast">' + esc(c.lastText) + '</div></div>' +
         '<span class="ctime">' + ago(c.lastAt) + '</span>' + (c.unread ? '<span class="unread-n">' + c.unread + '</span>' : '');
       d.onclick = () => openChat(c.user.id, c.user.name, c.user.avatar);
       box.appendChild(d);
     }
+    box.prepend(botRow());
   } catch (e) { toast(errText(e), 'err'); }
 }
 let dmQT;
@@ -524,7 +539,7 @@ async function dmSearch() {
   } catch (e) { toast(errText(e), 'err'); }
 }
 async function openChat(uid, name, avatar) {
-  dmPeer = uid; dmName = name;
+  dmPeer = uid; dmName = name; botChat = null;
   $('dm-list-view').hidden = true; $('dm-chat-view').hidden = false;
   $('dm-name').textContent = name; $('dm-ava').src = avatar ? url(avatar) : 'AG.png';
   $('dm-text').value = '';
@@ -567,6 +582,7 @@ async function loadConvosQuiet() { // обновить список без ми�
   } catch (_) {}
 }
 async function sendDM() {
+  if (botChat) return sendBot();
   if (!dmPeer) return;
   const inp = $('dm-text'), text = inp.value.trim(); if (!text) return;
   inp.value = '';
@@ -587,6 +603,231 @@ function startDmPoll() {
   }, 8000);
 }
 function stopDmPoll() { if (dmTimer) { clearInterval(dmTimer); dmTimer = null; } }
+
+// ───────── бейджи и профиль ─────────
+function badges(b) {
+  const x = b || {};
+  const out = [];
+  if (x.admin) out.push('<i class="bg bg-admin" title="Администратор">' + ICON.crown + 'АДМИН</i>');
+  if (x.mod) out.push('<i class="bg bg-mod" title="Модератор">' + ICON.shield + 'МОД</i>');
+  if (x.verified) out.push('<i class="bg bg-ver" title="Проверенный">' + ICON.shieldCheck + '</i>');
+  return out.length ? '<span class="badges">' + out.join('') + '</span>' : '';
+}
+function nameLink(name, id, badge) {
+  return '<b class="nlink" data-user="' + esc(id) + '">' + esc(name) + '</b>' + badges(badge);
+}
+document.addEventListener('click', e => {
+  const u = e.target.closest('[data-user]');
+  if (u && curPage !== 'user') openUser(u.dataset.user);
+});
+const canAdmin = () => !!(me && me.badge && (me.badge.admin || me.badge.mod));
+const isAdminU = () => !!(me && me.badge && me.badge.admin);
+async function openUser(id) {
+  if (!id || !token) return;
+  nav('user');
+  const box = $('user-view'); box.replaceChildren(skeletons(1));
+  try {
+    const d = await api('/api/users/' + id);
+    const u = d.user;
+    box.replaceChildren();
+    const top = document.createElement('div');
+    top.className = 'prof-top';
+    top.innerHTML = '<img src="' + (u.avatar ? esc(url(u.avatar)) : 'AG.png') + '" alt="">' +
+      '<div class="pinfo"><b>' + esc(u.name) + badges(u.badge) + '</b>' +
+      '<div class="hint">с нами с ' + new Date(u.createdAt).toLocaleDateString('ru-RU') + '</div></div>';
+    const acts = document.createElement('div');
+    acts.className = 'prof-actions';
+    if (!d.isSelf) {
+      const f = document.createElement('button');
+      f.className = 'primary'; f.type = 'button';
+      f.innerHTML = (d.follows ? ICON.check + 'Вы подписаны' : ICON.userPlus + 'Подписаться');
+      f.onclick = async () => {
+        try {
+          const r = await api('/api/users/' + id + '/follow', { method: 'POST' });
+          d.follows = r.follows; d.user.followers = r.followers;
+          f.innerHTML = (r.follows ? ICON.check + 'Вы подписаны' : ICON.userPlus + 'Подписаться');
+          f.classList.toggle('primary', !r.follows);
+          const fl = box.querySelector('.followers');
+          if (fl) fl.innerHTML = fCounters(d.user);
+          toast(r.follows ? 'Подписались на ' + u.name : 'Отписались', 'ok');
+        } catch (e) { toast(errText(e), 'err'); }
+      };
+      acts.appendChild(f);
+      const m = document.createElement('button');
+      m.type = 'button'; m.textContent = 'Написать';
+      m.onclick = () => { nav('dm'); dmToList(); openChat(id, u.name, u.avatar); };
+      acts.appendChild(m);
+    }
+    const fl = document.createElement('div');
+    fl.className = 'followers'; fl.innerHTML = fCounters(u);
+    const list = document.createElement('div');
+    list.className = 'feed'; list.style.display = 'flex'; list.style.flexDirection = 'column';
+    list.style.gap = 'var(--gap)'; list.style.marginTop = '14px';
+    if (!d.posts.length) list.innerHTML = '<div class="hint center">У игрока пока нет постов</div>';
+    d.posts.forEach(p => list.appendChild(card(p)));
+    box.append(top, acts, fl, document.createElement('h3'), list);
+    box.querySelector('h3').textContent = 'Посты игрока';
+  } catch (e) { box.innerHTML = '<div class="hint center">' + esc(errText(e)) + '</div>'; }
+}
+const fCounters = u =>
+  '<span><b>' + u.posts + '</b>постов</span><span><b>' + (u.likes || 0) + '</b>лайков</span>' +
+  '<span><b>' + u.followers + '</b>подписчиков</span><span><b>' + u.following + '</b>подписок</span>';
+
+// ───────── рассылка ─────────
+async function loadBroadcast() {
+  try {
+    const list = await api('/api/broadcasts');
+    const b = $('bc-banner');
+    if (!list.length) { b.hidden = true; return; }
+    const last = list[list.length - 1];
+    b.hidden = false;
+    b.innerHTML = '<span class="ico">' + ICON.megaphone + '</span><b>' + esc(last.text) + '</b>' +
+      '<small class="hint">' + esc(last.by) + ' · ' + ago(last.at) + '</small>';
+  } catch (_) {}
+}
+
+// ───────── админка ─────────
+async function loadAdmin() {
+  if (!canAdmin()) return;
+  try {
+    const s = await api('/api/admin/stats');
+    $('admin-stats').innerHTML = [
+      ['игроков', s.users], ['админов', s.admins], ['модераторов', s.mods],
+      ['галочек', s.verified], ['постов', s.posts], ['комментариев', s.comments],
+      ['реакций', s.reactions], ['тем', s.threads]
+    ].map(([n, v]) => '<div><b>' + v + '</b><span>' + n + '</span></div>').join('');
+  } catch (e) { toast(errText(e), 'err'); }
+  await loadAdminUsers();
+  await loadBroadcasts();
+}
+let admT;
+function loadAdminUsers() {
+  clearTimeout(admT);
+  return new Promise(res => {
+    admT = setTimeout(async () => {
+      const box = $('adm-users'); box.replaceChildren(skeletons(2));
+      try {
+        const list = await api('/api/admin/users?' + new URLSearchParams({ q: $('adm-q').value.trim() }));
+        box.replaceChildren();
+        if (!list.length) { box.innerHTML = '<div class="hint center">Никого не нашли</div>'; return res(); }
+        for (const u of list) box.appendChild(adminUserRow(u));
+      } catch (e) { box.innerHTML = '<div class="hint center">' + esc(errText(e)) + '</div>'; }
+      res();
+    }, 200);
+  });
+}
+function adminUserRow(u) {
+  const row = document.createElement('div'); row.className = 'au';
+  row.innerHTML = '<img src="' + (u.avatar ? esc(url(u.avatar)) : 'AG.png') + '" alt="" loading="lazy">' +
+    '<div class="ainfo"><b>' + esc(u.name) + '</b> <span class="hint">' + u.posts + ' постов · ' + ago(u.joined) + '</span></div>';
+  const roles = document.createElement('div'); roles.className = 'aroles';
+  const mk = (label, on, ic, apply) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = (on ? '✓ ' : '') + label;
+    b.className = on ? 'on' : '';
+    b.onclick = async () => {
+      try {
+        const r = await api('/api/admin/user/' + u.id + '/role', { method: 'POST', body: JSON.stringify(apply) });
+        b.classList.toggle('on', r.badge[apply.admin !== undefined ? 'admin' : apply.mod !== undefined ? 'mod' : 'verified']);
+        b.textContent = (r.badge[apply.admin !== undefined ? 'admin' : apply.mod !== undefined ? 'mod' : 'verified'] ? '✓ ' : '') + label;
+        if (me && r.id === me.id) me.badge = r.badge;
+        toast('Готово', 'ok'); loadAdmin();
+      } catch (e) { toast(errText(e), 'err'); }
+    };
+    return b;
+  };
+  roles.append(
+    mk('АДМИН', u.badge.admin, ICON.crown, { admin: !u.badge.admin }),
+    mk('МОД', u.badge.mod, ICON.shield, { mod: !u.badge.mod }),
+    mk('ГАЛОЧКА', u.badge.verified, ICON.shieldCheck, { verified: !u.badge.verified })
+  );
+  row.append(roles);
+  if (isAdminU() && u.id !== me.id) {
+    const del = document.createElement('button');
+    del.type = 'button'; del.title = 'Удалить игрока'; del.innerHTML = ICON.trash;
+    del.onclick = async () => {
+      if (!confirm('Удалить игрока ' + u.name + ' и всё его содержимое?')) return;
+      try { await api('/api/admin/user/' + u.id, { method: 'DELETE' }); toast('Игрок удалён', 'ok'); loadAdmin(); }
+      catch (e) { toast(errText(e), 'err'); }
+    };
+    row.appendChild(del);
+  }
+  row.querySelector('.ainfo').onclick = () => openUser(u.id);
+  row.querySelector('.ainfo').style.cursor = 'pointer';
+  return row;
+}
+async function loadBroadcasts() {
+  try {
+    const list = await api('/api/broadcasts');
+    const box = $('bc-list'); box.replaceChildren();
+    for (const b of list.slice().reverse()) {
+      const d = document.createElement('div'); d.className = 'bc';
+      d.innerHTML = '<div class="bctext">' + esc(b.text) + '<br><small>' + esc(b.by) + ' · ' + new Date(b.at).toLocaleString('ru-RU') + '</small></div>';
+      if (isAdminU()) {
+        const x = document.createElement('button');
+        x.className = 'icon-btn'; x.type = 'button'; x.title = 'Удалить'; x.innerHTML = ICON.x;
+        x.onclick = async () => { await api('/api/admin/broadcast/' + b.id, { method: 'DELETE' }); loadBroadcasts(); loadBroadcast(); };
+        d.appendChild(x);
+      }
+      box.appendChild(d);
+    }
+    if (!list.length) box.innerHTML = '<div class="hint center">Объявлений пока нет</div>';
+  } catch (e) { /* не админ — молча */ }
+}
+async function sendBroadcast() {
+  const text = $('bc-text').value.trim();
+  if (text.length < 2) return toast('Напиши сообщение', 'err');
+  const btn = $('bc-send'); busy(btn, true, 'Отправляю…');
+  try {
+    await api('/api/admin/broadcast', { method: 'POST', body: JSON.stringify({ text }) });
+    $('bc-text').value = ''; toast('Объявление отправлено всем', 'ok');
+    loadBroadcasts(); loadBroadcast();
+  } catch (e) { toast(errText(e), 'err'); }
+  busy(btn, false);
+}
+
+// ───────── бот ─────────
+let botChat = null;
+function botRow() {
+  const d = document.createElement('div'); d.className = 'convo botrow';
+  d.innerHTML = '<img src="AG.png" alt="" class="botava"><div class="cinfo"><b>AG Бот</b><div class="clast">помощь и информация — напиши /помощь</div></div>' + ICON.bot;
+  d.onclick = () => openBot();
+  return d;
+}
+async function openBot() {
+  botChat = [];
+  $('dm-list-view').hidden = true; $('dm-chat-view').hidden = false;
+  $('dm-name').textContent = 'AG Бот';
+  $('dm-ava').src = 'AG.png';
+  const box = $('dm-msgs'); box.replaceChildren();
+  const greet = document.createElement('div');
+  greet.className = 'bub them';
+  greet.innerHTML = 'Привет! Я бот воркшопа 🤖 Помогу по площадке и дам статистику.<br><small>Напиши /помощь</small>';
+  box.appendChild(greet);
+  $('dm-text').value = '';
+  $('dm-text').focus();
+}
+function botBubble(text, mine) {
+  const d = document.createElement('div');
+  d.className = 'bub ' + (mine ? 'me' : 'them');
+  d.innerHTML = esc(text).replace(/\n/g, '<br>') + '<small>' + new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) + '</small>';
+  return d;
+}
+async function sendBot() {
+  const inp = $('dm-text'), text = inp.value.trim();
+  if (!text) return;
+  inp.value = '';
+  const box = $('dm-msgs');
+  box.appendChild(botBubble(text, true));
+  box.scrollTop = box.scrollHeight;
+  try {
+    const r = await api('/api/bot', { method: 'POST', body: JSON.stringify({ text }) });
+    setTimeout(() => {
+      box.appendChild(botBubble(r.reply, false));
+      box.scrollTop = box.scrollHeight;
+    }, 280);
+  } catch (e) { box.appendChild(botBubble('Ошибка: ' + errText(e), false)); }
+}
 
 // ───────── новый пост ─────────
 function pickFile(input, max, test, err) {
@@ -635,10 +876,15 @@ async function publish() {
 async function refreshMe() {
   const r = await api('/api/me'); me = r.user;
   if (!me) logout();
+  $('me-admin').hidden = !canAdmin();
 }
 async function loadMine() {
   if (!me) return;
-  $('myname').textContent = me.name; $('myava').src = me.avatar ? url(me.avatar) : 'AG.png';
+  $('myname').textContent = me.name;
+  $('myava').src = me.avatar ? url(me.avatar) : 'AG.png';
+  const mine = document.querySelector('#page-me .pinfo b');
+  if (mine) mine.innerHTML = esc(me.name) + badges(me.badge);
+  $('me-admin').hidden = !canAdmin();
   const box = $('mylist'); box.replaceChildren(skeletons(1));
   try {
     const posts = await api('/api/me/posts');
@@ -745,6 +991,12 @@ function init() {
   $('dm-back').onclick = () => { dmToList(); loadConvos(); };
   $('dm-send').onclick = sendDM;
   $('dm-text').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sendDM(); } });
+
+  // админка и навигация «назад»
+  $('me-admin').onclick = () => nav('admin');
+  $('bc-send').onclick = sendBroadcast;
+  $('adm-q').oninput = loadAdminUsers;
+  document.querySelectorAll('.prof-back').forEach(b => b.onclick = () => nav(b.dataset.go));
 
   // форма поста
   $('kind-proj').onclick = () => setKind('proj'); $('kind-build').onclick = () => setKind('build');

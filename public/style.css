@@ -201,6 +201,48 @@ button.re.add:hover{color:var(--acc2)}
 #nav button{position:relative}
 .bdot{position:absolute;top:4px;right:calc(50% - 24px);min-width:19px;height:19px;border-radius:10px;background:var(--bad);color:#fff;font-size:11px;font-weight:700;font-style:normal;display:flex;align-items:center;justify-content:center;padding:0 5px;animation:pop .3s}
 
+/* ---------- бейджи ролей ---------- */
+.badges{display:inline-flex;gap:4px;align-items:center;vertical-align:middle;margin-left:6px}
+.bg{display:inline-flex;align-items:center;gap:3px;font-size:9.5px;font-weight:700;letter-spacing:.8px;padding:2px 6px;border-radius:5px;border:1px solid;white-space:nowrap}
+.bg .ic{width:11px;height:11px;stroke-width:2.6}
+.bg-admin{color:#ff9d5c;border-color:rgba(255,157,92,.5);background:rgba(255,157,92,.1)}
+.bg-mod{color:#7fc8ff;border-color:rgba(127,200,255,.5);background:rgba(127,200,255,.1)}
+.bg-ver{color:var(--acc2);border-color:rgba(245,166,35,.55);background:rgba(245,166,35,.1)}
+.who b{color:#fff;display:inline-flex;align-items:center;flex-wrap:wrap;gap:0}
+.nlink{cursor:pointer}
+.nlink:hover{text-decoration:underline;color:var(--acc2)}
+
+/* ---------- профиль игрока ---------- */
+.prof-back{margin-bottom:4px}
+.prof-top{display:flex;gap:14px;align-items:center;background:linear-gradient(135deg,rgba(245,166,35,.1),var(--card) 60%);border:1px solid var(--line);border-radius:var(--r);padding:16px;animation:rise .3s both}
+.prof-top img{width:80px;height:80px;border-radius:50%;object-fit:cover;border:2px solid var(--acc);background:#000;flex:none}
+.prof-top .pinfo b{display:block;font-size:22px;color:#fff}
+.prof-actions{display:flex;gap:8px;margin-top:12px}
+.followers{display:flex;gap:14px;margin-top:12px;padding:12px 2px;color:var(--dim);font-size:14px}
+.followers b{color:#fff;margin-right:4px}
+#user-view .card{margin-bottom:var(--gap)}
+
+/* ---------- админка ---------- */
+.admin-btn{margin-top:12px;background:rgba(245,166,35,.1);border-color:rgba(245,166,35,.5);color:var(--acc2)}
+.admin-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin:12px 0}
+.admin-stats div{background:var(--card);border:1px solid var(--line);border-radius:var(--r-sm);padding:10px;text-align:center}
+.admin-stats b{display:block;font-size:20px;color:var(--acc2)}
+.admin-stats span{font-size:11px;color:var(--dim);letter-spacing:.6px;text-transform:uppercase}
+#adm-users,#bc-list{display:flex;flex-direction:column;gap:8px}
+.au{display:flex;gap:10px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:var(--r-sm);padding:9px 11px;animation:rise .25s both}
+.au img{width:38px;height:38px;border-radius:50%;object-fit:cover;border:1px solid var(--line2);background:#000;flex:none}
+.au .ainfo{flex:1;min-width:0}
+.au .ainfo b{color:#fff}
+.au .aroles{display:flex;gap:5px;flex-wrap:wrap}
+.au button{width:auto;min-height:32px;padding:0 9px;font-size:12px;border-radius:8px}
+.au button.on{background:rgba(245,166,35,.16);border-color:var(--acc);color:var(--acc2)}
+.bc{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 12px}
+.bc .bctext{flex:1;min-width:0;white-space:pre-wrap}
+.bc small{color:var(--dim)}
+#bc-banner{display:flex;gap:10px;align-items:center;background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.45);border-radius:var(--r-sm);padding:11px 13px;margin-bottom:12px;animation:rise .3s both}
+#bc-banner .ic{color:var(--acc2);width:20px;height:20px}
+#bc-banner b{flex:1;min-width:0;font-size:14px}
+
 /* ---------- форумы ---------- */
 #forum-cats{margin-bottom:4px}
 #forum-cats button{white-space:nowrap}
