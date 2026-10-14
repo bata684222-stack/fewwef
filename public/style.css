@@ -205,12 +205,13 @@ button.re.add:hover{color:var(--acc2)}
 #sentinel{min-height:1px}
 
 /* ---------- нижняя навигация ---------- */
-#nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(680px,100%);z-index:20;display:grid;grid-template-columns:1fr 1fr 72px 1fr 1fr 1fr;align-items:end;gap:4px;padding:8px 10px calc(8px + env(safe-area-inset-bottom,0px));background:var(--panel);border-top:1px solid var(--line);backdrop-filter:blur(14px)}
-#nav button{flex-direction:column;gap:3px;min-height:52px;padding:4px;border:0;background:transparent;color:var(--dim);font-size:11px;letter-spacing:.8px;font-weight:600;border-radius:12px}
+#nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(680px,100%);z-index:20;display:flex;align-items:end;gap:4px;overflow-x:auto;scrollbar-width:none;padding:8px 10px calc(8px + env(safe-area-inset-bottom,0px));background:var(--panel);border-top:1px solid var(--line);backdrop-filter:blur(14px)}
+#nav::-webkit-scrollbar{display:none}
+#nav button{flex:1 0 62px;flex-direction:column;gap:3px;min-height:52px;padding:4px;border:0;background:transparent;color:var(--dim);font-size:11px;letter-spacing:.8px;font-weight:600;border-radius:12px}
 #nav button:hover{background:rgba(255,255,255,.04)}
 #nav button.on{color:var(--acc2);background:rgba(245,166,35,.1)}
 #nav .ic{width:22px;height:22px}
-#nav-add{width:58px;height:58px;min-height:0!important;padding:0!important;margin:-26px auto 0!important;border-radius:50%!important;background:linear-gradient(135deg,var(--acc),#e0830c)!important;color:#1a1100!important;box-shadow:0 6px 24px rgba(245,166,35,.45),0 0 0 4px var(--bg)}
+#nav-add{flex:none;width:58px;height:58px;min-height:0!important;padding:0!important;margin:-26px auto 0!important;border-radius:50%!important;background:linear-gradient(135deg,var(--acc),#e0830c)!important;color:#1a1100!important;box-shadow:0 6px 24px rgba(245,166,35,.45),0 0 0 4px var(--bg)}
 #nav-add .ic{width:28px;height:28px;stroke-width:2.6}
 #nav-add:active{transform:scale(.92)}
 #nav button{position:relative}

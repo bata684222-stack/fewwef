@@ -1590,6 +1590,7 @@ function init() {
   $('nav-feed').onclick = () => nav('feed'); $('nav-forum').onclick = () => nav('forum');
   $('nav-add').onclick = () => nav('add'); $('nav-dm').onclick = () => nav('dm');
   $('nav-me').onclick = () => nav('me'); $('nav-set').onclick = () => nav('set');
+  $('nav-dl').onclick = () => { location.href = 'download.html'; };
   $('me-edit').onclick = () => nav('set');
 
   // форумы
