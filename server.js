@@ -271,9 +271,9 @@ function serveIndex(_req, res, meta) {
   let html;
   try { html = fs.readFileSync(INDEX_FILE, 'utf8'); }
   catch (_) { return res.status(500).type('txt').send('index.html не найден'); }
-  // подставляем версию в ссылки на ассеты
-  html = html.replace(/(src|href)="(app\.js|style\.css)(?:\?v=[a-z0-9]+)?"/gi,
-    (_, a, f) => a + '="' + f + '?v=' + ASSET_V + '"');
+  // подставляем версию в ссылки на ассеты (и чиним относительные в абсолютные)
+  html = html.replace(/(src|href)="\/?(app\.js|style\.css)(?:\?v=[a-z0-9]+)?"/gi,
+    (_, a, f) => a + '="/' + f + '?v=' + ASSET_V + '"');
   if (meta) { // красивое превью расшаренного поста в мессенджерах
     const tags = '<meta property="og:type" content="article">' +
       '<meta property="og:site_name" content="WorkshopAG">' +

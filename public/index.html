@@ -6,11 +6,11 @@
 <meta name="description" content="WorkshopAG — лента снарядов и построек от реальных игроков: фото, чертежи в JSON, обсуждения.">
 <meta name="theme-color" content="#050506">
 <title>WorkshopAG — лента</title>
-<link rel="icon" type="image/png" href="AG.png">
+<link rel="icon" type="image/png" href="/AG.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="/style.css">
 </head>
 <body>
 <noscript><p style="padding:16px;text-align:center">Для работы WorkshopAG нужен JavaScript.</p></noscript>
@@ -18,7 +18,7 @@
 <!-- ВХОД -->
 <div id="gate">
   <div class="menu-box" role="dialog" aria-labelledby="gate-title">
-    <img class="logo" src="AG.png" alt="AG" width="120" height="120" decoding="async">
+    <img class="logo" src="/AG.png" alt="AG" width="120" height="120" decoding="async">
     <div class="menu-title" id="gate-title">WORKSHOP AG</div>
     <div class="menu-sub">реальные люди · фото · json · текст</div>
     <div class="seg" role="tablist">
@@ -38,7 +38,7 @@
 <!-- ПРИЛОЖЕНИЕ -->
 <div id="app" style="display:none">
   <header class="topbar">
-    <button class="brand" id="brand" type="button" aria-label="Наверх"><img src="AG.png" alt="" width="32" height="32" decoding="async"><b>WORKSHOP AG</b></button>
+    <button class="brand" id="brand" type="button" aria-label="Наверх"><img src="/AG.png" alt="" width="32" height="32" decoding="async"><b>WORKSHOP AG</b></button>
     <div class="search">
       <span class="ico" data-ic="search"></span>
       <input id="q" type="search" placeholder="Поиск по постам…" aria-label="Поиск по постам" maxlength="40" autocomplete="off" enterkeyhint="search">
@@ -114,7 +114,7 @@
   <!-- ПРОФИЛЬ -->
   <main id="page-me" class="page" style="display:none">
     <div class="profile">
-      <img id="myava" src="AG.png" alt="Аватар" width="72" height="72" decoding="async">
+      <img id="myava" src="/AG.png" alt="Аватар" width="72" height="72" decoding="async">
       <div class="pinfo">
         <b id="myname">—</b>
         <div class="hint" id="mystats"></div>
@@ -131,7 +131,7 @@
     <h3>Профиль</h3>
     <div class="form">
       <div class="ava-edit">
-        <img id="s-prev" src="AG.png" alt="Аватар" width="72" height="72" decoding="async">
+        <img id="s-prev" src="/AG.png" alt="Аватар" width="72" height="72" decoding="async">
         <div>
           <label class="btn small" for="s-ava"><span class="ico" data-ic="image"></span>Сменить фото</label>
           <input id="s-ava" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
@@ -235,7 +235,7 @@
     </div>
     <div id="dm-chat-view" hidden>
       <button id="dm-back" class="small" type="button">← К диалогам</button>
-      <div class="chathead"><img id="dm-ava" src="AG.png" width="40" height="40" alt=""><b id="dm-name">—</b><span class="spacer"></span><button id="dm-call-a" class="icon-btn" type="button" title="Позвонить" aria-label="Позвонить" data-ic="phone"></button><button id="dm-call-v" class="icon-btn" type="button" title="Видеозвонок" aria-label="Видеозвонок" data-ic="video"></button></div>
+      <div class="chathead"><img id="dm-ava" src="/AG.png" width="40" height="40" alt=""><b id="dm-name">—</b><span class="spacer"></span><button id="dm-call-a" class="icon-btn" type="button" title="Позвонить" aria-label="Позвонить" data-ic="phone"></button><button id="dm-call-v" class="icon-btn" type="button" title="Видеозвонок" aria-label="Видеозвонок" data-ic="video"></button></div>
       <div id="dm-msgs"></div>
       <div class="cform"><input id="dm-text" placeholder="Сообщение…" maxlength="1000" aria-label="Сообщение" enterkeyhint="send"><button id="dm-send" class="icon-btn primary" type="button" aria-label="Отправить" data-ic="send"></button></div>
     </div>
@@ -282,7 +282,7 @@
 <!-- ЗВОНОК -->
 <div id="call-modal" hidden>
   <div class="call-box">
-    <img id="call-ava" src="AG.png" width="84" height="84" alt="">
+    <img id="call-ava" src="/AG.png" width="84" height="84" alt="">
     <b id="call-name">—</b>
     <div class="hint" id="call-state">Соединение…</div>
     <div class="call-vids" id="call-vids" hidden>
@@ -301,6 +301,6 @@
 </div>
 
 <div id="toasts" aria-live="polite"></div>
-<script src="app.js" defer></script>
+<script src="/app.js" defer></script>
 </body>
 </html>

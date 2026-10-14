@@ -141,8 +141,10 @@ async function gateGo() {
     const r = await api('/api/' + mode, { method: 'POST', body: JSON.stringify({ name, password }) });
     token = r.token; me = r.user; LS.set('wsa_token', token);
     $('g-pass').value = '';
-    showApp(); curPage = null; feedDirty = true; nav('feed'); startDmPoll(); startCallPoll();
-    openSharedPost(pendingPostId());
+    showApp(); curPage = null; feedDirty = true; startDmPoll(); startCallPoll();
+    const sp = pendingPostId();
+    if (sp) openSharedPost(sp); // только пост, без фоновой ленты
+    else nav('feed');
   } catch (e) { $('g-err').textContent = errText(e); }
   busy(btn, false);
 }
@@ -240,7 +242,7 @@ function card(p) {
   const own = me && p.authorId === me.id;
   const canDel = own || canAdmin();
   d.innerHTML =
-    '<div class="chead"><img class="ava" src="' + (p.avatar ? esc(url(p.avatar)) : 'AG.png') + '" alt="" width="40" height="40" loading="lazy">' +
+    '<div class="chead"><img class="ava" src="' + (p.avatar ? esc(url(p.avatar)) : '/AG.png') + '" alt="" width="40" height="40" loading="lazy">' +
       '<div class="who"><b>' + nameLink(p.author, p.authorId, p.authorBadge) + onDot(p.authorOnline) + '</b><small title="' + esc(new Date(p.createdAt).toLocaleString('ru-RU')) + '">' + ago(p.createdAt) + '</small></div>' +
       '<span class="tag">' + (p.kind === 'build' ? 'ПОСТРОЙКА' : 'СНАРЯД') + '</span></div>' +
     '<div class="cbody"><h4 class="ctitle">' + esc(p.title) + '</h4>' + (p.body ? '<div class="ctext">' + esc(p.body) + '</div>' : '') + '</div>' +
@@ -262,7 +264,7 @@ function card(p) {
       '<div class="cform"><input placeholder="Написать комментарий…" maxlength="500" aria-label="Комментарий" enterkeyhint="send">' +
       '<button class="icon-btn primary send" type="button" title="Отправить" aria-label="Отправить">' + ICON.send + '</button></div></div>';
 
-  d.querySelectorAll('.ava').forEach(i => i.addEventListener('error', () => { if (!i.dataset.f) { i.dataset.f = 1; i.src = 'AG.png'; } }));
+  d.querySelectorAll('.ava').forEach(i => i.addEventListener('error', () => { if (!i.dataset.f) { i.dataset.f = 1; i.src = '/AG.png'; } }));
   const main = d.querySelector('img.main'); if (main) main.addEventListener('error', () => main.remove());
   paint(d, p);
 
@@ -314,19 +316,27 @@ function pendingPostId() {
 async function openSharedPost(id) {
   if (!id) return;
   history.replaceState(null, '', '/');
+  if (curPage !== 'feed') nav('feed');
+  feedDirty = false; // ленту пока не грузим — покажем только пост
+  const f = $('feed');
+  f.replaceChildren(skeletons(1)); $('empty').hidden = true;
   try {
-    feedDirty = false;
-    await load();
-    let el = document.querySelector('.card[data-id="' + CSS.escape(id) + '"]');
-    if (!el) {
-      const p = await api('/api/posts/' + id); // глубоко в ленте — подтянем отдельно
-      el = card(p);
-      el.style.animationDelay = '0ms';
-      $('feed').prepend(el);
-    }
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
-  } catch (_) { toast('Пост не найден', 'err'); }
+    const p = await api('/api/posts/' + id);
+    f.replaceChildren();
+    const back = document.createElement('button');
+    back.type = 'button'; back.className = 'backline';
+    back.innerHTML = ICON.back + 'В ленту';
+    back.onclick = () => { feedDirty = true; nav('feed'); };
+    const el = card(p);
+    el.style.animationDelay = '0ms';
+    f.append(back, el);
+    feedDirty = true; // «назад» перезагрузит обычную ленту
+    window.scrollTo({ top: 0 });
+    el.classList.add('flash');
+  } catch (_) {
+    toast('Пост не найден', 'err');
+    feedDirty = true; nav('feed');
+  }
 }
 
 // ───────── скачивания: один раз за сессию ─────────
@@ -551,7 +561,7 @@ async function openThread(id) {
     curThread = t;
     const v = $('thread-view');
     const own = me && t.authorId === me.id;
-    v.innerHTML = '<div class="card"><div class="chead"><img class="ava" src="' + (t.avatar ? esc(url(t.avatar)) : 'AG.png') + '" alt="" width="40" height="40">' +
+    v.innerHTML = '<div class="card"><div class="chead"><img class="ava" src="' + (t.avatar ? esc(url(t.avatar)) : '/AG.png') + '" alt="" width="40" height="40">' +
       '<div class="who"><b>' + esc(t.author) + '</b><small>' + ago(t.createdAt) + '</small></div><span class="tag">' + esc(t.catName) + '</span></div>' +
       '<div class="cbody"><h4 class="ctitle">' + esc(t.title) + '</h4>' + (t.body ? '<div class="ctext">' + esc(t.body) + '</div>' : '') + '</div>' +
       '<div class="actions"><span class="hint">ответов: ' + replies.length + '</span><span class="spacer"></span>' +
@@ -663,7 +673,7 @@ async function openGroup(id) {
     for (const m of g.members) {
       const row = document.createElement('div');
       row.className = 'convo'; row.style.cursor = m.id === me.id ? 'default' : 'pointer';
-      row.innerHTML = '<img src="' + (m.avatar ? esc(url(m.avatar)) : 'AG.png') + '" alt="" loading="lazy"><div class="cinfo"><b>' + nameLink(m.name, m.id, m.badge) + onDot(m.online) + '</b><div class="clast">' + (m.role === 'owner' ? 'владелец' : 'участник') + (m.online ? ' · в сети' : '') + '</div></div>' +
+      row.innerHTML = '<img src="' + (m.avatar ? esc(url(m.avatar)) : '/AG.png') + '" alt="" loading="lazy"><div class="cinfo"><b>' + nameLink(m.name, m.id, m.badge) + onDot(m.online) + '</b><div class="clast">' + (m.role === 'owner' ? 'владелец' : 'участник') + (m.online ? ' · в сети' : '') + '</div></div>' +
         ((owner || admin) && m.id !== g.ownerId ? '<button class="small" type="button">Кик</button>' : '');
       const kb = row.querySelector('button');
       if (kb) kb.onclick = async ev => {
@@ -768,7 +778,7 @@ async function loadConvos() {
     if (!list.length) { const e = $('dm-empty'); e.innerHTML = ICON.mail + '<b>Диалогов нет</b><span>Найди человека выше и напиши первым</span>'; e.hidden = false; }
     for (const c of list) {
       const u = c.user;
-      box.appendChild(convoRow(u.avatar ? url(u.avatar) : 'AG.png',
+      box.appendChild(convoRow(u.avatar ? url(u.avatar) : '/AG.png',
         nameLink(u.name, u.id, u.badge) + onDot(u.online), esc(c.lastText),
         convoRight(ago(c.lastAt), c.unread), () => openChat(u.id, u.name, u.avatar)));
     }
@@ -784,7 +794,7 @@ async function dmSearch() {
     const users = await api('/api/users?' + new URLSearchParams({ q, limit: 10 }));
     if (!users.length) { box.innerHTML = '<div class="hint">Никого не нашёл</div>'; return; }
     for (const u of users) {
-      box.appendChild(convoRow(u.avatar ? url(u.avatar) : 'AG.png',
+      box.appendChild(convoRow(u.avatar ? url(u.avatar) : '/AG.png',
         nameLink(u.name, u.id, u.badge) + onDot(u.online), 'написать сообщение →', '',
         () => openChat(u.id, u.name, u.avatar)));
     }
@@ -793,7 +803,7 @@ async function dmSearch() {
 async function openChat(uid, name, avatar) {
   dmPeer = uid; dmName = name; botChat = null;
   $('dm-list-view').hidden = true; $('dm-chat-view').hidden = false;
-  $('dm-name').textContent = name; $('dm-ava').src = avatar ? url(avatar) : 'AG.png';
+  $('dm-name').textContent = name; $('dm-ava').src = avatar ? url(avatar) : '/AG.png';
   $('dm-text').value = '';
   await loadChat();
   pollUnread();
@@ -826,7 +836,7 @@ async function loadConvosQuiet() { // обновить список без ми�
     if (!list.length) { const e = $('dm-empty'); e.innerHTML = ICON.mail + '<b>Диалогов нет</b>'; e.hidden = false; return; }
     for (const c of list) {
       const u = c.user;
-      box.appendChild(convoRow(u.avatar ? url(u.avatar) : 'AG.png',
+      box.appendChild(convoRow(u.avatar ? url(u.avatar) : '/AG.png',
         nameLink(u.name, u.id, u.badge) + onDot(u.online), esc(c.lastText),
         convoRight(ago(c.lastAt), c.unread), () => openChat(u.id, u.name, u.avatar)));
     }
@@ -887,7 +897,7 @@ async function loadOnline() {
     for (const u of list) {
       const d = document.createElement('div');
       d.className = 'on-ava';
-      d.innerHTML = '<img src="' + (u.avatar ? esc(url(u.avatar)) : 'AG.png') + '" alt="" loading="lazy"><span>' + esc(u.name) + '</span>';
+      d.innerHTML = '<img src="' + (u.avatar ? esc(url(u.avatar)) : '/AG.png') + '" alt="" loading="lazy"><span>' + esc(u.name) + '</span>';
       d.onclick = () => openUser(u.id);
       box.appendChild(d);
     }
@@ -909,7 +919,7 @@ async function openUser(id) {
     box.replaceChildren();
     const top = document.createElement('div');
     top.className = 'prof-top';
-    top.innerHTML = '<img src="' + (u.avatar ? esc(url(u.avatar)) : 'AG.png') + '" alt="">' +
+    top.innerHTML = '<img src="' + (u.avatar ? esc(url(u.avatar)) : '/AG.png') + '" alt="">' +
       '<div class="pinfo"><b>' + esc(u.name) + badges(u.badge) + '</b>' +
       '<div class="hint">с нами с ' + new Date(u.createdAt).toLocaleDateString('ru-RU') + ' · ' + statusLine(u) + '</div></div>';
     const acts = document.createElement('div');
@@ -1006,7 +1016,7 @@ function loadAdminUsers() {
 }
 function adminUserRow(u) {
   const row = document.createElement('div'); row.className = 'au';
-  row.innerHTML = '<img src="' + (u.avatar ? esc(url(u.avatar)) : 'AG.png') + '" alt="" loading="lazy">' +
+  row.innerHTML = '<img src="' + (u.avatar ? esc(url(u.avatar)) : '/AG.png') + '" alt="" loading="lazy">' +
     '<div class="ainfo"><b>' + esc(u.name) + '</b> <span class="hint">' + u.posts + ' постов · ' + ago(u.joined) + '</span></div>';
   const roles = document.createElement('div'); roles.className = 'aroles';
   const mk = (label, on, ic, apply) => {
@@ -1086,7 +1096,7 @@ async function openBot() {
   botChat = [];
   $('dm-list-view').hidden = true; $('dm-chat-view').hidden = false;
   $('dm-name').textContent = 'AG Бот';
-  $('dm-ava').src = 'AG.png';
+  $('dm-ava').src = '/AG.png';
   const box = $('dm-msgs'); box.replaceChildren();
   const greet = document.createElement('div');
   greet.className = 'bub them';
@@ -1148,7 +1158,7 @@ function ringStop() { if (ringTimer) clearTimeout(ringTimer); ringTimer = null; 
 function callShow(state, name, avatar, kind) {
   $('call-modal').hidden = false;
   $('call-name').textContent = name;
-  $('call-ava').src = avatar ? url(avatar) : 'AG.png';
+  $('call-ava').src = avatar ? url(avatar) : '/AG.png';
   $('call-state').textContent = state + (kind === 'video' ? ' · видео' : ' · голос');
   $('call-incoming').hidden = true; $('call-active').hidden = true;
 }
@@ -1332,7 +1342,7 @@ function gPeerEl(uid, peer) {
     box = document.createElement('div');
     box.className = 'gpeer'; box.id = 'gpeer-' + uid;
     box.innerHTML = '<video id="gp-' + uid + '" autoplay playsinline hidden></video>' +
-      '<img src="' + (peer?.avatar ? esc(url(peer.avatar)) : 'AG.png') + '" alt=""><b>' + esc(peer?.name || '…') + '</b>';
+      '<img src="' + (peer?.avatar ? esc(url(peer.avatar)) : '/AG.png') + '" alt=""><b>' + esc(peer?.name || '…') + '</b>';
     $('gcall-peers')?.appendChild(box);
   } else if (peer) {
     box.querySelector('b').textContent = peer.name;
@@ -1567,7 +1577,7 @@ async function refreshMe() {
 async function loadMine() {
   if (!me) return;
   $('myname').textContent = me.name;
-  $('myava').src = me.avatar ? url(me.avatar) : 'AG.png';
+  $('myava').src = me.avatar ? url(me.avatar) : '/AG.png';
   const mine = document.querySelector('#page-me .pinfo b');
   if (mine) mine.innerHTML = esc(me.name) + badges(me.badge);
   $('me-admin').hidden = !canAdmin();
@@ -1586,7 +1596,7 @@ async function loadMine() {
 }
 async function loadSettings() {
   if (!me) return;
-  $('s-name').value = me.name; $('s-prev').src = me.avatar ? url(me.avatar) : 'AG.png';
+  $('s-name').value = me.name; $('s-prev').src = me.avatar ? url(me.avatar) : '/AG.png';
   $('s-calls').checked = !me.callsOff;
   try { const h = await api('/api/health'); $('health').textContent = 'Сервер ок · v' + (h.version || '?') + ' · постов: ' + h.posts + ' · юзеров: ' + h.users; }
   catch (_) { $('health').textContent = 'Сервер недоступен'; }
@@ -1605,7 +1615,7 @@ async function saveSettings() {
     const r = await api('/api/me', { method: 'PATCH', body: fd });
     token = r.token; LS.set('wsa_token', token); me = r.user;
     $('s-pass').value = ''; $('s-ava').value = ''; feedDirty = true;
-    $('s-prev').src = me.avatar ? url(me.avatar) : 'AG.png';
+    $('s-prev').src = me.avatar ? url(me.avatar) : '/AG.png';
     toast('Сохранено', 'ok');
   } catch (e) { toast(errText(e), 'err'); }
   busy(btn, false);
@@ -1752,7 +1762,12 @@ function init() {
 
   // старт
   if (!token) { showGate(); return; }
-  showApp(); nav('feed'); startDmPoll(); startCallPoll();
-  refreshMe().then(() => { if (curPage === 'me') loadMine(); openSharedPost(pendingPostId()); }).catch(() => toast('Нет связи с сервером', 'err'));
+  showApp(); startDmPoll(); startCallPoll();
+  if (!pendingPostId()) nav('feed'); // c расшаренной ссылкой ленту не грузим
+  refreshMe().then(() => {
+    if (curPage === 'me') loadMine();
+    const sp = pendingPostId();
+    if (sp) openSharedPost(sp);
+  }).catch(() => toast('Нет связи с сервером', 'err'));
 }
 init();
