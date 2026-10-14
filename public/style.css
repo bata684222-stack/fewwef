@@ -284,6 +284,16 @@ button.re.add:hover{color:var(--acc2)}
 .convo .ctime{color:var(--dim);font-size:11px;flex:none}
 .botrow .ic{color:var(--acc2);width:22px;height:22px}
 .botrow img.botava{border-color:var(--acc)}
+
+/* ---------- кто в сети ---------- */
+.on-dot{width:9px;height:9px;border-radius:50%;background:var(--ok);display:inline-block;margin-left:6px;flex:none;box-shadow:0 0 6px rgba(95,214,138,.9);vertical-align:middle}
+.on-row{display:flex;gap:10px;overflow-x:auto;padding:6px 2px 10px;scrollbar-width:none}
+.on-row::-webkit-scrollbar{display:none}
+.on-ava{display:flex;flex-direction:column;align-items:center;gap:3px;flex:none;width:58px;cursor:pointer}
+.on-ava img{width:46px;height:46px;border-radius:50%;object-fit:cover;border:2px solid var(--ok);background:#000}
+.on-ava span{font-size:11px;color:var(--txt);max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.status-on{color:var(--ok);font-weight:700}
+.status-off{color:var(--dim)}
 .unread-n{min-width:22px;height:22px;border-radius:11px;background:var(--bad);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 6px;flex:none}
 .chathead{display:flex;align-items:center;gap:10px;padding:12px 2px 4px}
 .chathead img{width:40px;height:40px;border-radius:50%;object-fit:cover;border:1px solid var(--line2);background:#000}

@@ -239,7 +239,7 @@ function card(p) {
   const canDel = own || canAdmin();
   d.innerHTML =
     '<div class="chead"><img class="ava" src="' + (p.avatar ? esc(url(p.avatar)) : 'AG.png') + '" alt="" width="40" height="40" loading="lazy">' +
-      '<div class="who"><b>' + nameLink(p.author, p.authorId, p.authorBadge) + '</b><small title="' + esc(new Date(p.createdAt).toLocaleString('ru-RU')) + '">' + ago(p.createdAt) + '</small></div>' +
+      '<div class="who"><b>' + nameLink(p.author, p.authorId, p.authorBadge) + onDot(p.authorOnline) + '</b><small title="' + esc(new Date(p.createdAt).toLocaleString('ru-RU')) + '">' + ago(p.createdAt) + '</small></div>' +
       '<span class="tag">' + (p.kind === 'build' ? 'ПОСТРОЙКА' : 'СНАРЯД') + '</span></div>' +
     '<div class="cbody"><h4 class="ctitle">' + esc(p.title) + '</h4>' + (p.body ? '<div class="ctext">' + esc(p.body) + '</div>' : '') + '</div>' +
     (p.photo ? '<img class="main" loading="lazy" decoding="async" src="' + esc(url(p.photo)) + '" alt="' + esc(p.title) + '">' : '') +
@@ -483,7 +483,7 @@ async function loadThreads() {
       d.className = 'trow'; d.style.animationDelay = Math.min(i * 40, 300) + 'ms';
       d.innerHTML = '<b>' + esc(t.title) + '</b>' +
         (t.body ? '<div class="tbody">' + esc(t.body) + '</div>' : '') +
-        '<div class="tmeta"><span class="tag">' + esc(t.catName) + '</span><span>' + esc(t.author) + ' · ' + ago(t.lastAt) + '</span><span class="rc">' + ICON.cmt.replace('class="ic"', 'class="ic" width="14" height="14"') + ' ' + t.replies + '</span></div>';
+        '<div class="tmeta"><span class="tag">' + esc(t.catName) + '</span><span>' + esc(t.author) + onDot(t.authorOnline) + ' · ' + ago(t.lastAt) + '</span><span class="rc">' + ICON.cmt.replace('class="ic"', 'class="ic" width="14" height="14"') + ' ' + t.replies + '</span></div>';
       d.onclick = () => openThread(t.id);
       box.appendChild(d);
     });
@@ -618,7 +618,7 @@ async function openGroup(id) {
     for (const m of g.members) {
       const row = document.createElement('div');
       row.className = 'convo'; row.style.cursor = m.id === me.id ? 'default' : 'pointer';
-      row.innerHTML = '<img src="' + (m.avatar ? esc(url(m.avatar)) : 'AG.png') + '" alt="" loading="lazy"><div class="cinfo"><b>' + nameLink(m.name, m.id, m.badge) + '</b><div class="clast">' + (m.role === 'owner' ? 'владелец' : 'участник') + '</div></div>' +
+      row.innerHTML = '<img src="' + (m.avatar ? esc(url(m.avatar)) : 'AG.png') + '" alt="" loading="lazy"><div class="cinfo"><b>' + nameLink(m.name, m.id, m.badge) + onDot(m.online) + '</b><div class="clast">' + (m.role === 'owner' ? 'владелец' : 'участник') + (m.online ? ' · в сети' : '') + '</div></div>' +
         ((owner || admin) && m.id !== g.ownerId ? '<button class="small" type="button">Кик</button>' : '');
       const kb = row.querySelector('button');
       if (kb) kb.onclick = async ev => {
@@ -708,19 +708,27 @@ async function pollUnread() {
 function dmToList() {
   dmPeer = null; botChat = null; $('dm-list-view').hidden = false; $('dm-chat-view').hidden = true;
 }
+// строка диалога/юзера: аватар + ник с бейджами и точкой онлайна
+function convoRow(img, nameHtml, sub, right, onclick) {
+  const d = document.createElement('div'); d.className = 'convo';
+  d.innerHTML = '<img src="' + img + '" alt="" loading="lazy"><div class="cinfo"><b>' + nameHtml + '</b><div class="clast">' + sub + '</div></div>' + right;
+  d.onclick = onclick;
+  return d;
+}
+const convoRight = (time, unread) => '<span class="ctime">' + time + '</span>' + (unread ? '<span class="unread-n">' + unread + '</span>' : '');
 async function loadConvos() {
   const box = $('dm-convos'); box.replaceChildren(); $('dm-empty').hidden = true;
   try {
     const list = await api('/api/dm');
     if (!list.length) { const e = $('dm-empty'); e.innerHTML = ICON.mail + '<b>Диалогов нет</b><span>Найди человека выше и напиши первым</span>'; e.hidden = false; }
     for (const c of list) {
-      const d = document.createElement('div'); d.className = 'convo';
-      d.innerHTML = '<img src="' + (c.user.avatar ? esc(url(c.user.avatar)) : 'AG.png') + '" alt="" loading="lazy"><div class="cinfo"><b>' + nameLink(c.user.name, c.user.id, c.user.badge) + '</b><div class="clast">' + esc(c.lastText) + '</div></div>' +
-        '<span class="ctime">' + ago(c.lastAt) + '</span>' + (c.unread ? '<span class="unread-n">' + c.unread + '</span>' : '');
-      d.onclick = () => openChat(c.user.id, c.user.name, c.user.avatar);
-      box.appendChild(d);
+      const u = c.user;
+      box.appendChild(convoRow(u.avatar ? url(u.avatar) : 'AG.png',
+        nameLink(u.name, u.id, u.badge) + onDot(u.online), esc(c.lastText),
+        convoRight(ago(c.lastAt), c.unread), () => openChat(u.id, u.name, u.avatar)));
     }
     box.prepend(botRow());
+    loadOnline();
   } catch (e) { toast(errText(e), 'err'); }
 }
 let dmQT;
@@ -731,10 +739,9 @@ async function dmSearch() {
     const users = await api('/api/users?' + new URLSearchParams({ q, limit: 10 }));
     if (!users.length) { box.innerHTML = '<div class="hint">Никого не нашёл</div>'; return; }
     for (const u of users) {
-      const d = document.createElement('div'); d.className = 'convo';
-      d.innerHTML = '<img src="' + (u.avatar ? esc(url(u.avatar)) : 'AG.png') + '" alt="" loading="lazy"><div class="cinfo"><b>' + esc(u.name) + '</b><div class="clast">написать сообщение →</div></div>';
-      d.onclick = () => openChat(u.id, u.name, u.avatar);
-      box.appendChild(d);
+      box.appendChild(convoRow(u.avatar ? url(u.avatar) : 'AG.png',
+        nameLink(u.name, u.id, u.badge) + onDot(u.online), 'написать сообщение →', '',
+        () => openChat(u.id, u.name, u.avatar)));
     }
   } catch (e) { toast(errText(e), 'err'); }
 }
@@ -773,11 +780,10 @@ async function loadConvosQuiet() { // обновить список без ми�
     box.replaceChildren(); $('dm-empty').hidden = true;
     if (!list.length) { const e = $('dm-empty'); e.innerHTML = ICON.mail + '<b>Диалогов нет</b>'; e.hidden = false; return; }
     for (const c of list) {
-      const d = document.createElement('div'); d.className = 'convo';
-      d.innerHTML = '<img src="' + (c.user.avatar ? esc(url(c.user.avatar)) : 'AG.png') + '" alt="" loading="lazy"><div class="cinfo"><b>' + esc(c.user.name) + '</b><div class="clast">' + esc(c.lastText) + '</div></div>' +
-        '<span class="ctime">' + ago(c.lastAt) + '</span>' + (c.unread ? '<span class="unread-n">' + c.unread + '</span>' : '');
-      d.onclick = () => openChat(c.user.id, c.user.name, c.user.avatar);
-      box.appendChild(d);
+      const u = c.user;
+      box.appendChild(convoRow(u.avatar ? url(u.avatar) : 'AG.png',
+        nameLink(u.name, u.id, u.badge) + onDot(u.online), esc(c.lastText),
+        convoRight(ago(c.lastAt), c.unread), () => openChat(u.id, u.name, u.avatar)));
     }
   } catch (_) {}
 }
@@ -799,7 +805,10 @@ function startDmPoll() {
   dmTimer = setInterval(async () => {
     if (!token || !$('app') || $('app').style.display === 'none') return;
     pollUnread();
-    if (curPage === 'dm' && dmPeer && !$('dm-chat-view').hidden) loadChat();
+    if (curPage === 'dm') {
+      loadOnline();
+      if (dmPeer && !$('dm-chat-view').hidden) loadChat();
+    }
   }, 8000);
 }
 function stopDmPoll() { if (dmTimer) { clearInterval(dmTimer); dmTimer = null; } }
@@ -815,6 +824,29 @@ function badges(b) {
 }
 function nameLink(name, id, badge) {
   return '<b class="nlink" data-user="' + esc(id) + '">' + esc(name) + '</b>' + badges(badge);
+}
+// зелёная точка онлайна + строка статуса
+const onDot = on => on ? '<i class="on-dot" title="В сети"></i>' : '';
+const statusLine = u => !u ? '' : (u.online
+  ? '<span class="status-on">● в сети</span>'
+  : (u.lastSeen ? '<span class="status-off">был(а) ' + ago(u.lastSeen) + '</span>' : ''));
+async function loadOnline() {
+  const box = $('online-now'), h = $('online-h');
+  if (!box) return;
+  try {
+    const list = await api('/api/online');
+    box.replaceChildren();
+    const show = list.length > 0;
+    box.hidden = !show; if (h) h.hidden = !show;
+    if (!show) return;
+    for (const u of list) {
+      const d = document.createElement('div');
+      d.className = 'on-ava';
+      d.innerHTML = '<img src="' + (u.avatar ? esc(url(u.avatar)) : 'AG.png') + '" alt="" loading="lazy"><span>' + esc(u.name) + '</span>';
+      d.onclick = () => openUser(u.id);
+      box.appendChild(d);
+    }
+  } catch (_) {}
 }
 document.addEventListener('click', e => {
   const u = e.target.closest('[data-user]');
@@ -834,7 +866,7 @@ async function openUser(id) {
     top.className = 'prof-top';
     top.innerHTML = '<img src="' + (u.avatar ? esc(url(u.avatar)) : 'AG.png') + '" alt="">' +
       '<div class="pinfo"><b>' + esc(u.name) + badges(u.badge) + '</b>' +
-      '<div class="hint">с нами с ' + new Date(u.createdAt).toLocaleDateString('ru-RU') + '</div></div>';
+      '<div class="hint">с нами с ' + new Date(u.createdAt).toLocaleDateString('ru-RU') + ' · ' + statusLine(u) + '</div></div>';
     const acts = document.createElement('div');
     acts.className = 'prof-actions';
     if (!d.isSelf) {
@@ -1001,7 +1033,7 @@ async function sendBroadcast() {
 let botChat = null;
 function botRow() {
   const d = document.createElement('div'); d.className = 'convo botrow';
-  d.innerHTML = '<img src="AG.png" alt="" class="botava"><div class="cinfo"><b>AG Бот</b><div class="clast">помощь и информация — напиши /помощь</div></div>' + ICON.bot;
+  d.innerHTML = '<img src="AG.png" alt="" class="botava"><div class="cinfo"><b>AG Бот' + onDot(true) + '</b><div class="clast">помощь и информация — напиши /помощь</div></div>' + ICON.bot;
   d.onclick = () => openBot();
   return d;
 }

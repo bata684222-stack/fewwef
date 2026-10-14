@@ -295,7 +295,10 @@ function authOpt(req, _res, next) {
       const p = jwt.verify(h.slice(7), JWT_SECRET);
       const u = usersById.get(p.id);
       // токен недействителен, если юзер удалён или сменил пароль
-      if (u && (p.tv || 0) === (u.tv || 0)) req.user = u;
+      if (u && (p.tv || 0) === (u.tv || 0)) {
+        req.user = u;
+        u.lastSeen = Date.now(); // heartbeat: любой запрос = «я в сети», пишется раз в минуту
+      }
     } catch (_) {}
   }
   next();
@@ -304,7 +307,11 @@ function authNeed(req, res, next) {
   authOpt(req, res, () => req.user ? next() : res.status(401).json({ error: 'need_auth' }));
 }
 
-const pubUser = u => ({ id: u.id, name: u.name, avatar: u.avatar || null, badge: badgeOf(u), views: u.views || 0, callsOff: !!u.callsOff, createdAt: u.createdAt });
+const pubUser = u => ({ id: u.id, name: u.name, avatar: u.avatar || null, badge: badgeOf(u), views: u.views || 0, callsOff: !!u.callsOff, online: isOnline(u), lastSeen: u.lastSeen || 0, createdAt: u.createdAt });
+const ONLINE_MS = 120e3;
+function isOnline(u) { return !!u && (Date.now() - (u.lastSeen || 0)) < ONLINE_MS; }
+// раз в минуту фиксируем heartbeat в хранилище, чтобы онлайн переживал рестарт
+setInterval(() => { try { saveDB(); } catch (_) {} }, 60e3).unref?.();
 const REACTIONS = ['🔥', '👏', '🎯', '🧠', '💀'];
 function postDTO(p, viewerId) {
   const s = stats.get(p.id) || { l: 0, d: 0, c: 0, r: {} };
@@ -319,7 +326,7 @@ function postDTO(p, viewerId) {
     avatar: a ? a.avatar || null : null,
     likes: s.l, dislikes: s.d, comments: s.c, views: p.views || 0, downloads: p.downloads || 0,
     reactions: s.r, myReactions: mine,
-    authorBadge: badgeOf(a),
+    authorBadge: badgeOf(a), authorOnline: isOnline(a),
     myVote: viewerId ? (db.votes[p.id + ':' + viewerId] || 0) : 0
   };
 }
@@ -338,7 +345,7 @@ app.post('/api/register', authLimiter, wrap(async (req, res) => {
   if (reservedName(name) && hasAdmins()) fail(403, 'reserved_name'); // ник владельца занят им самим
   const pass = await bcrypt.hash(password, BCRYPT_COST);
   if (usersByName.has(name.toLowerCase())) fail(409, 'name_taken'); // гонка во время await
-  const u = { id: uid(), name, pass, avatar: null, tv: 0, createdAt: Date.now() };
+  const u = { id: uid(), name, pass, avatar: null, tv: 0, lastSeen: Date.now(), createdAt: Date.now() };
   if (!hasAdmins()) u.admin = true; // самый первый игрок площадки — админ, дальше только выдача
   db.users.push(u); usersById.set(u.id, u); usersByName.set(name.toLowerCase(), u);
   saveDB();
@@ -378,7 +385,7 @@ app.post('/api/setup', authLimiter, wrap(async (req, res) => {
   if (hasAdmins() && !ADMIN_NAMES.includes(key) && !VERIFIED_NAMES.includes(key)) fail(403, 'use_register');
   const pass = await bcrypt.hash(password, BCRYPT_COST);
   if (usersByName.has(key)) fail(409, 'name_taken');
-  const nu = { id: uid(), name, pass, avatar: null, tv: 0, createdAt: Date.now() };
+  const nu = { id: uid(), name, pass, avatar: null, tv: 0, lastSeen: Date.now(), createdAt: Date.now() };
   if (ADMIN_NAMES.includes(key) || !hasAdmins()) nu.admin = true;
   if (VERIFIED_NAMES.includes(key)) nu.verified = true;
   db.users.push(nu); usersById.set(nu.id, nu); usersByName.set(key, nu);
@@ -635,7 +642,7 @@ function threadDTO(t, viewerId) {
   return {
     id: t.id, cat: t.cat, catName: catName(t.cat), title: t.title, body: t.body,
     author: a ? a.name : t.author, avatar: a ? a.avatar || null : null,
-    authorBadge: badgeOf(a),
+    authorBadge: badgeOf(a), authorOnline: isOnline(a),
     authorId: t.authorId, createdAt: t.createdAt, lastAt: t.lastAt || t.createdAt,
     replies, my: !!viewerId && t.authorId === viewerId
   };
@@ -708,14 +715,14 @@ app.delete('/api/treplies/:id', authNeed, writeLimiter, (req, res) => {
 const dmDTO = (m, selfId) => {
   const peerId = m.fromId === selfId ? m.toId : m.fromId;
   const peer = usersById.get(peerId);
-  return { ...m, peer: peer ? { id: peer.id, name: peer.name, avatar: peer.avatar || null, badge: badgeOf(peer) } : { id: peerId, name: 'Удалён', avatar: null, badge: {} } };
+  return { ...m, peer: peer ? { id: peer.id, name: peer.name, avatar: peer.avatar || null, badge: badgeOf(peer), online: isOnline(peer) } : { id: peerId, name: 'Удалён', avatar: null, badge: {} } };
 };
 app.get('/api/users', authNeed, (req, res) => {
   const q = String(req.query.q || '').trim().toLowerCase().slice(0, 20);
   const limit = clampInt(req.query.limit, 20, 1, 20);
   let list = db.users.filter(u => u.id !== req.user.id);
   if (q) list = list.filter(u => u.name.toLowerCase().includes(q));
-  list = list.slice(0, limit).map(u => ({ id: u.id, name: u.name, avatar: u.avatar || null, badge: badgeOf(u) }));
+  list = list.slice(0, limit).map(u => ({ id: u.id, name: u.name, avatar: u.avatar || null, badge: badgeOf(u), online: isOnline(u) }));
   res.json(list);
 });
 app.get('/api/dm/unread', authNeed, (req, res) => {
@@ -735,7 +742,7 @@ app.get('/api/dm', authNeed, (req, res) => {
   }
   const list = [...conv.values()].map(c => {
     const peer = usersById.get(c.peerId);
-    return { user: peer ? { id: peer.id, name: peer.name, avatar: peer.avatar || null, badge: badgeOf(peer) } : { id: c.peerId, name: 'Удалён', avatar: null, badge: {} }, lastText: c.lastText, lastAt: c.lastAt, unread: c.unread };
+    return { user: peer ? { id: peer.id, name: peer.name, avatar: peer.avatar || null, badge: badgeOf(peer), online: isOnline(peer) } : { id: c.peerId, name: 'Удалён', avatar: null, badge: {} }, lastText: c.lastText, lastAt: c.lastAt, unread: c.unread };
   }).sort((a, b) => b.lastAt - a.lastAt);
   res.json(list);
 });
@@ -795,6 +802,16 @@ app.post('/api/users/:id/follow', authNeed, writeLimiter, (req, res) => {
   if (!Object.keys(mine).length) delete db.follows[req.user.id];
   saveDB();
   res.json({ follows: !!db.follows[req.user.id]?.[target.id], followers: followersOf(target.id) });
+});
+
+// кто сейчас в сети (heartbeat моложе 2 минут)
+app.get('/api/online', authNeed, (req, res) => {
+  const list = db.users
+    .filter(u => u.id !== req.user.id && isOnline(u))
+    .sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0))
+    .slice(0, 50)
+    .map(u => ({ id: u.id, name: u.name, avatar: u.avatar || null, badge: badgeOf(u) }));
+  res.json(list);
 });
 
 // ───────────────────────── рассылка от админа ─────────────────────────
@@ -1010,7 +1027,7 @@ app.get('/api/groups/:id', authNeed, (req, res) => {
   if (!g) fail(404, 'not_found');
   const members = Object.entries(g.members || {}).map(([uid, role]) => {
     const u = usersById.get(uid);
-    return u ? { id: u.id, name: u.name, avatar: u.avatar || null, badge: badgeOf(u), role } : null;
+    return u ? { id: u.id, name: u.name, avatar: u.avatar || null, badge: badgeOf(u), online: isOnline(u), role } : null;
   }).filter(Boolean);
   res.json({ ...groupDTO(g, req.user.id), members });
 });

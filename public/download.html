@@ -18,6 +18,9 @@
   .dl-hero h1{margin:6px 0 0;font-size:30px;letter-spacing:5px;color:#fff}
   .dl-hero p{color:var(--dim);letter-spacing:2px;font-size:12px;text-transform:uppercase;margin:4px 0 0}
   .ver{display:inline-block;margin-top:10px;font-size:12px;font-weight:700;letter-spacing:1.5px;color:var(--acc2);border:1px solid var(--acc);border-radius:999px;padding:3px 14px;background:rgba(245,166,35,.08)}
+  .trailer{position:relative;border:1px solid var(--line);border-radius:20px;overflow:hidden;background:#000;animation:rise .35s both;box-shadow:0 14px 44px rgba(0,0,0,.55)}
+  .trailer video{display:block;width:100%;max-height:46vh;background:#000}
+  .trailer-tag{position:absolute;top:10px;left:10px;z-index:2;font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--acc2);background:rgba(0,0,0,.65);border:1px solid var(--acc);border-radius:999px;padding:3px 12px;backdrop-filter:blur(4px)}
   .dl-card{display:flex;gap:14px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;animation:rise .35s both;transition:border-color .2s,box-shadow .2s,transform .2s}
   .dl-card:hover{border-color:var(--acc);box-shadow:0 10px 34px rgba(0,0,0,.5),0 0 22px rgba(245,166,35,.12);transform:translateY(-2px)}
   .dl-ico{width:60px;height:60px;flex:none;border-radius:16px;display:flex;align-items:center;justify-content:center;background:rgba(245,166,35,.1);border:1px solid rgba(245,166,35,.4)}
@@ -49,6 +52,11 @@
     <h1>ARMOR GAME</h1>
     <p>Удар, а не анимация · Windows и Android</p>
     <div><span class="ver">v1.0 · бесплатно</span></div>
+  </div>
+
+  <div class="trailer" style="animation-delay:.03s">
+    <div class="trailer-tag">▶ Геймплей</div>
+    <video controls preload="metadata" playsinline src="downloads/trailer.mp4"></video>
   </div>
 
   <div class="dl-card" style="animation-delay:.05s">
