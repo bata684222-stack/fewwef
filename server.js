@@ -266,21 +266,44 @@ function computeAssetVersion() {
   ASSET_V = h.digest('hex').slice(0, 8);
 }
 const INDEX_FILE = path.join(PUBLIC_DIR, 'index.html');
-function serveIndex(_req, res) {
+const ogEsc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').slice(0, 300);
+function serveIndex(_req, res, meta) {
   let html;
   try { html = fs.readFileSync(INDEX_FILE, 'utf8'); }
   catch (_) { return res.status(500).type('txt').send('index.html не найден'); }
   // подставляем версию в ссылки на ассеты
   html = html.replace(/(src|href)="(app\.js|style\.css)(?:\?v=[a-z0-9]+)?"/gi,
     (_, a, f) => a + '="' + f + '?v=' + ASSET_V + '"');
+  if (meta) { // красивое превью расшаренного поста в мессенджерах
+    const tags = '<meta property="og:type" content="article">' +
+      '<meta property="og:site_name" content="WorkshopAG">' +
+      '<meta property="og:title" content="' + ogEsc(meta.title) + '">' +
+      '<meta property="og:description" content="' + ogEsc(meta.desc) + '">' +
+      (meta.img ? '<meta property="og:image" content="' + ogEsc(meta.img) + '">' : '') + '</head>';
+    html = html.replace('</head>', tags);
+  }
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');
   res.set('X-App-Version', ASSET_V);
   res.type('html').send(html);
 }
-app.get('/', serveIndex);
+app.get('/', (req, res) => serveIndex(req, res));
 app.get('/index.html', serveIndex); // и напрямую — тоже без кэша
+// короткая ссылка на пост: /p/<id> — человеку отдаёт приложение, роботу — превью
+app.get('/p/:id', (req, res) => {
+  const p = postsById.get(req.params.id);
+  if (!p) return serveIndex(req, res);
+  const a = usersById.get(p.authorId);
+  const host = (req.get('x-forwarded-host') || req.get('host') || '').split(',')[0].trim();
+  const proto = (req.get('x-forwarded-proto') || req.protocol || 'https').split(',')[0].trim();
+  const base = host ? proto + '://' + host : '';
+  serveIndex(req, res, {
+    title: (p.kind === 'build' ? '▦ ' : '🚀 ') + p.title + ' — WorkshopAG',
+    desc: (a ? a.name : p.author) + (p.body ? ': ' + p.body.slice(0, 160) : '') + ' · 👍' + (stats.get(p.id)?.l || 0) + ' · 👁' + (p.views || 0),
+    img: p.photo && base ? base + '/' + p.photo : (base ? base + '/AG.png' : null)
+  });
+});
 // ассеты — надолго: имя меняется при каждом деплое через ?v=
 app.use(express.static(PUBLIC_DIR, { maxAge: '30d', immutable: true, index: false, dotfiles: 'deny' }));
 
@@ -504,6 +527,12 @@ app.get('/api/posts', authOpt, (req, res) => {
 
   res.set('X-Total-Count', String(list.length));
   res.json(list.slice(offset, offset + limit).map(p => postDTO(p, req.user?.id))); // DTO только для нужной страницы
+});
+// один пост — для расшаренных ссылок
+app.get('/api/posts/:id', authOpt, (req, res) => {
+  const p = postsById.get(req.params.id);
+  if (!p) fail(404, 'not_found');
+  res.json(postDTO(p, req.user?.id));
 });
 
 app.post('/api/posts', authNeed, writeLimiter,

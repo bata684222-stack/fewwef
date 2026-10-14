@@ -23,6 +23,7 @@ const ICON = {
   dislike: IC('<path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H6.28a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/>'),
   cmt: IC('<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>'),
   send: IC('<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>'),
+  share: IC('<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/>'),
   x: IC('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'),
   file: IC('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>'),
   download: IC('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'),
@@ -141,6 +142,7 @@ async function gateGo() {
     token = r.token; me = r.user; LS.set('wsa_token', token);
     $('g-pass').value = '';
     showApp(); curPage = null; feedDirty = true; nav('feed'); startDmPoll(); startCallPoll();
+    openSharedPost(pendingPostId());
   } catch (e) { $('g-err').textContent = errText(e); }
   busy(btn, false);
 }
@@ -250,6 +252,7 @@ function card(p) {
       '<button class="chip like" type="button" aria-label="Нравится">' + ICON.like + '<span></span></button>' +
       '<button class="chip dis" type="button" aria-label="Не нравится">' + ICON.dislike + '<span></span></button>' +
       '<button class="chip cmtb" type="button" aria-label="Комментарии">' + ICON.cmt + '<span></span></button>' +
+      '<button class="chip shareb" type="button" aria-label="Скопировать ссылку" title="Скопировать ссылку">' + ICON.share + '</button>' +
       '<span class="views" title="Просмотры">' + ICON.eye + '<span>' + (p.views || 0) + '</span></span>' +
       '<span class="spacer"></span><span class="score"></span>' +
       (canDel ? '<button class="icon-btn del" type="button" title="' + (own ? 'Удалить пост' : 'Удалить как модератор') + '" aria-label="Удалить пост">' + ICON.trash + '</button>' : '') +
@@ -278,10 +281,52 @@ function card(p) {
   inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sendComment(p, d, inp, sendB); } });
   const del = d.querySelector('.del');
   if (del) del.onclick = () => deletePost(p, d);
+  d.querySelector('.shareb').onclick = ev => { pop(ev.currentTarget); sharePost(p.id); };
   const dl = d.querySelector('a.dl');
   if (dl) dl.addEventListener('click', () => countDownload(p, d));
   viewObs.observe(d);
   return d;
+}
+
+// ───────── шаринг постов ─────────
+const postLink = id => location.origin + '/p/' + id;
+async function sharePost(id) {
+  const link = postLink(id);
+  try {
+    await navigator.clipboard.writeText(link);
+    toast('Ссылка скопирована', 'ok');
+  } catch (_) {
+    const ta = document.createElement('textarea');
+    ta.value = link; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); toast('Ссылка скопирована', 'ok'); }
+    catch (_) { prompt('Скопируй ссылку:', link); }
+    ta.remove();
+  }
+}
+// открытие по расшаренной ссылке (?post= или /p/): ждём входа, потом показываем пост
+function pendingPostId() {
+  const q = new URLSearchParams(location.search).get('post');
+  if (q) return q;
+  const m = location.pathname.match(/^\/p\/([\w-]+)/);
+  return m ? m[1] : null;
+}
+async function openSharedPost(id) {
+  if (!id) return;
+  history.replaceState(null, '', '/');
+  try {
+    feedDirty = false;
+    await load();
+    let el = document.querySelector('.card[data-id="' + CSS.escape(id) + '"]');
+    if (!el) {
+      const p = await api('/api/posts/' + id); // глубоко в ленте — подтянем отдельно
+      el = card(p);
+      el.style.animationDelay = '0ms';
+      $('feed').prepend(el);
+    }
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+  } catch (_) { toast('Пост не найден', 'err'); }
 }
 
 // ───────── скачивания: один раз за сессию ─────────
@@ -1708,6 +1753,6 @@ function init() {
   // старт
   if (!token) { showGate(); return; }
   showApp(); nav('feed'); startDmPoll(); startCallPoll();
-  refreshMe().then(() => { if (curPage === 'me') loadMine(); }).catch(() => toast('Нет связи с сервером', 'err'));
+  refreshMe().then(() => { if (curPage === 'me') loadMine(); openSharedPost(pendingPostId()); }).catch(() => toast('Нет связи с сервером', 'err'));
 }
 init();

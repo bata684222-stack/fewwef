@@ -84,6 +84,7 @@ npm start
 - Профили: `GET /api/users/:id` (посты, лайки, подписчики, `follows`, счётчик просмотров), `POST /api/users/:id/follow` — переключить подписку
 - Просмотры: `POST /api/posts/:id/view` (+1 к посту; просмотры чужого профиля растут сами при открытии)
 - Скачивания чертежа: `POST /api/posts/:id/download` → `{ downloads }` (счётчик виден у кнопки «Скачать»)
+- Шаринг: кнопка «поделиться» копирует ссылку `/p/:id`; `GET /api/posts/:id` — один пост; `/p/:id` отдаёт страницу с OG-превью для мессенджеров
 - Рассылка: `GET /api/broadcasts` — последние 10 объявлений
 - Админка: `GET /api/admin/stats`, `GET /api/admin/users?q=`, `POST /api/admin/user/:id/role {admin,mod,verified}`, `DELETE /api/admin/user/:id`, `POST /api/admin/broadcast {text}`, `DELETE /api/admin/broadcast/:id`, `DELETE /api/admin/{post|comment|thread|reply}/:id`
 - Бот: `POST /api/bot {text}` → `{ reply }`
