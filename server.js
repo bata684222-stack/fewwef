@@ -288,6 +288,23 @@ function serveIndex(_req, res, meta) {
   res.set('X-App-Version', ASSET_V);
   res.type('html').send(html);
 }
+// прямые загрузки игры: форсируем «скачать файлом», а не «открыть в браузере»
+// (трейлер идёт через обычную статику ниже — видео должно играть инлайн)
+const DL_FILES = {
+  'ArmorGame-v1.0.exe': 'application/x-msdownload',
+  'ArmorGame-v1.0.apk': 'application/vnd.android.package-archive'
+};
+app.get('/downloads/:file', (req, res, next) => {
+  const type = DL_FILES[req.params.file];
+  if (!type) return next(); // трейлер и прочее отдаёт обычная статика ниже
+  res.set('Content-Type', type);
+  res.set('Content-Disposition', 'attachment; filename="' + req.params.file + '"');
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.sendFile(path.join(PUBLIC_DIR, 'downloads', req.params.file), err => {
+    if (err && !res.headersSent) res.status(404).end();
+  });
+});
 app.get('/', (req, res) => serveIndex(req, res));
 app.get('/index.html', serveIndex); // и напрямую — тоже без кэша
 // короткая ссылка на пост: /p/<id> — человеку отдаёт приложение, роботу — превью
