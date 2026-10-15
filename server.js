@@ -588,6 +588,32 @@ app.delete('/api/posts/:id', authNeed, writeLimiter, (req, res) => {
   res.json({ ok: true });
 });
 
+// правка своего поста: название/текст/тип + замена или удаление фото и JSON
+app.patch('/api/posts/:id', authNeed, writeLimiter,
+  ...withUploads(upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'jsonfile', maxCount: 1 }])),
+  wrap(async (req, res) => {
+    const p = postsById.get(req.params.id);
+    if (!p) fail(404, 'not_found');
+    if (p.authorId !== req.user.id) fail(403, 'not_yours');
+    if (req.body?.title !== undefined) {
+      const title = String(req.body.title).trim().slice(0, 80);
+      if (title.length < 2) fail(400, 'short_title');
+      p.title = title;
+    }
+    if (req.body?.body !== undefined) p.body = String(req.body.body).trim().slice(0, 2000);
+    if (req.body?.kind === 'proj' || req.body?.kind === 'build') p.kind = req.body.kind;
+    const ph = req.files?.photo?.[0], js = req.files?.jsonfile?.[0];
+    if (ph) { safeUnlink(p.photo); p.photo = 'uploads/' + await persistUpload(ph); }
+    else if (req.body?.removePhoto) { safeUnlink(p.photo); p.photo = null; }
+    if (js) {
+      safeUnlink(p.jsonUrl);
+      p.jsonUrl = 'uploads/' + await persistUpload(js);
+      p.jsonName = String(js.originalname || 'file.json').slice(0, 80);
+    } else if (req.body?.removeJson) { safeUnlink(p.jsonUrl); p.jsonUrl = null; p.jsonName = null; }
+    saveDB();
+    res.json(postDTO(p, req.user.id));
+  }));
+
 app.post('/api/posts/:id/vote', authNeed, writeLimiter, (req, res) => {
   const p = postsById.get(req.params.id);
   if (!p) fail(404, 'not_found');

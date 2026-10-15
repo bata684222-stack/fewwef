@@ -349,6 +349,11 @@ button.re.add:hover{color:var(--acc2)}
 
 /* ---------- лайтбокс и уведомления ---------- */
 #lightbox{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.94);animation:fade .15s;cursor:zoom-out}
+/* ---------- модалка редактирования ---------- */
+#edit-modal{position:fixed;inset:0;z-index:110;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:5vh 12px;background:rgba(0,0,0,.78);animation:fade .18s;backdrop-filter:blur(4px)}
+.edit-box{width:min(520px,100%);margin:auto}
+.check{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:14px;font-weight:500;cursor:pointer}
+.check input{width:18px;min-height:18px;accent-color:var(--acc);flex:none}
 #lightbox img{max-width:96vw;max-height:92vh;object-fit:contain}
 #lb-close{position:absolute;top:calc(12px + env(safe-area-inset-top,0px));right:12px;background:rgba(30,30,36,.9)}
 #toasts{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:120;display:flex;flex-direction:column;gap:8px;width:min(92vw,420px);pointer-events:none}

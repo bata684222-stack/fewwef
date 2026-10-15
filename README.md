@@ -82,6 +82,7 @@ npm start
 - Личка: `GET /api/users?q=` (поиск акков), `GET /api/dm` (диалоги), `GET /api/dm/unread`, `GET/POST /api/dm/:uid`
 - Онлайн: heartbeat на каждый запрос, `GET /api/online` — активные за 2 минуты (флаг `online`/`lastSeen` есть везде в юзерах)
 - Профили: `GET /api/users/:id` (посты, лайки, подписчики, `follows`, счётчик просмотров), `POST /api/users/:id/follow` — переключить подписку
+- Правка своего поста: `PATCH /api/posts/:id` (multipart: `title, body, kind`, замена `photo`/`jsonfile` или флаги `removePhoto`/`removeJson`) — только автор, кнопка-карандаш в профиле
 - Просмотры: `POST /api/posts/:id/view` (+1 к посту; просмотры чужого профиля растут сами при открытии)
 - Скачивания чертежа: `POST /api/posts/:id/download` → `{ downloads }` (счётчик виден у кнопки «Скачать»)
 - Шаринг: кнопка «поделиться» копирует ссылку `/p/:id`; `GET /api/posts/:id` — один пост; `/p/:id` отдаёт страницу с OG-превью для мессенджеров

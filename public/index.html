@@ -279,6 +279,35 @@
 
 <div id="lightbox" hidden><button class="icon-btn" id="lb-close" type="button" aria-label="Закрыть" data-ic="x"></button><img id="lb-img" alt=""></div>
 
+<!-- РЕДАКТИРОВАНИЕ ПОСТА -->
+<div id="edit-modal" hidden>
+  <div class="edit-box form">
+    <h3>Изменить пост</h3>
+    <div class="seg" role="tablist" aria-label="Тип поста">
+      <button id="ekind-proj" type="button" role="tab">Снаряд</button>
+      <button id="ekind-build" type="button" role="tab">Постройка</button>
+    </div>
+    <label class="fld">Название
+      <input id="etitle" maxlength="80" autocomplete="off">
+    </label>
+    <label class="fld">Описание
+      <textarea id="ebody" rows="3" maxlength="2000"></textarea>
+    </label>
+    <label class="fld">Фото <small class="opt">пусто — не менять</small>
+      <input id="ephoto" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+    </label>
+    <label class="check"><input id="ephoto-del" type="checkbox"> убрать фото</label>
+    <label class="fld">JSON-чертёж <small class="opt">пусто — не менять</small>
+      <input id="ejson" type="file" accept=".json,application/json">
+    </label>
+    <label class="check"><input id="ejson-del" type="checkbox"> убрать файл</label>
+    <div class="row2">
+      <button id="esave" class="primary" type="button">Сохранить</button>
+      <button id="eclose" type="button">Отмена</button>
+    </div>
+  </div>
+</div>
+
 <!-- ЗВОНОК -->
 <div id="call-modal" hidden>
   <div class="call-box">

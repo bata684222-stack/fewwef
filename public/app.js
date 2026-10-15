@@ -258,6 +258,7 @@ function card(p) {
       '<span class="views" title="Просмотры">' + ICON.eye + '<span>' + (p.views || 0) + '</span></span>' +
       '<span class="spacer"></span><span class="score"></span>' +
       (canDel ? '<button class="icon-btn del" type="button" title="' + (own ? 'Удалить пост' : 'Удалить как модератор') + '" aria-label="Удалить пост">' + ICON.trash + '</button>' : '') +
+      (own ? '<button class="icon-btn ed" type="button" title="Изменить пост" aria-label="Изменить пост">' + ICON.edit + '</button>' : '') +
     '</div>' +
     '<div class="react" aria-label="Реакции"></div>' +
     '<div class="comments" hidden><div class="clist"></div>' +
@@ -283,11 +284,56 @@ function card(p) {
   inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sendComment(p, d, inp, sendB); } });
   const del = d.querySelector('.del');
   if (del) del.onclick = () => deletePost(p, d);
+  const ed = d.querySelector('.ed');
+  if (ed) ed.onclick = () => openEdit(p.id);
   d.querySelector('.shareb').onclick = ev => { pop(ev.currentTarget); sharePost(p.id); };
   const dl = d.querySelector('a.dl');
   if (dl) dl.addEventListener('click', () => countDownload(p, d));
   viewObs.observe(d);
   return d;
+}
+
+// ───────── правка своего поста ─────────
+let editId = null, editKind = 'proj';
+function setEKind(k) {
+  editKind = k;
+  $('ekind-proj').classList.toggle('on', k === 'proj');
+  $('ekind-build').classList.toggle('on', k === 'build');
+}
+async function openEdit(id) {
+  try {
+    const p = await api('/api/posts/' + id);
+    if (!me || p.authorId !== me.id) return toast('Это не твой пост', 'err');
+    editId = id;
+    $('etitle').value = p.title; $('ebody').value = p.body || '';
+    $('ephoto').value = ''; $('ejson').value = '';
+    $('ephoto-del').checked = false; $('ejson-del').checked = false;
+    setEKind(p.kind === 'build' ? 'build' : 'proj');
+    $('edit-modal').hidden = false;
+  } catch (e) { toast(errText(e), 'err'); }
+}
+function closeEdit() { editId = null; $('edit-modal').hidden = true; }
+async function saveEdit() {
+  if (!editId) return;
+  const title = $('etitle').value.trim();
+  if (title.length < 2) { toast('Дай посту название', 'err'); $('etitle').focus(); return; }
+  const fd = new FormData();
+  fd.append('title', title);
+  fd.append('body', $('ebody').value.trim());
+  fd.append('kind', editKind);
+  if ($('ephoto').files[0]) fd.append('photo', $('ephoto').files[0]);
+  else if ($('ephoto-del').checked) fd.append('removePhoto', '1');
+  if ($('ejson').files[0]) fd.append('jsonfile', $('ejson').files[0]);
+  else if ($('ejson-del').checked) fd.append('removeJson', '1');
+  const btn = $('esave'); busy(btn, true, 'Сохраняю…');
+  try {
+    await api('/api/posts/' + editId, { method: 'PATCH', body: fd });
+    closeEdit();
+    if (curPage === 'me') loadMine();
+    else { feedDirty = true; if (curPage === 'feed') load(); }
+    toast('Сохранено', 'ok');
+  } catch (e) { toast(errText(e), 'err'); }
+  busy(btn, false);
 }
 
 // ───────── шаринг постов ─────────
@@ -1727,6 +1773,10 @@ function init() {
   $('photo-clear').onclick = () => { $('photo').value = ''; setPhoto(); };
   $('json-clear').onclick = () => { $('jsonfile').value = ''; setJson(); };
   $('publish').onclick = publish;
+  $('ekind-proj').onclick = () => setEKind('proj'); $('ekind-build').onclick = () => setEKind('build');
+  $('esave').onclick = saveEdit;
+  $('eclose').onclick = closeEdit;
+  $('edit-modal').addEventListener('click', e => { if (e.target.id === 'edit-modal') closeEdit(); });
   document.querySelectorAll('.drop').forEach(z => {
     const inp = z.querySelector('input');
     ['dragenter', 'dragover'].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.add('over'); }));
@@ -1752,7 +1802,11 @@ function init() {
 
   // лайтбокс, «наверх»
   $('lightbox').onclick = closeLB;
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('lightbox').hidden) closeLB(); });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (!$('lightbox').hidden) closeLB();
+    else if (!$('edit-modal').hidden) closeEdit();
+  });
   const top = $('totop'); let tick = false;
   top.onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
   addEventListener('scroll', () => {
