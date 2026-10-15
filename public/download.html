@@ -17,7 +17,16 @@
   .dl-hero img{width:min(170px,50vw);height:auto;margin:0 auto 4px;animation:floaty 4s ease-in-out infinite,glow 3s ease-in-out infinite}
   .dl-hero h1{margin:6px 0 0;font-size:30px;letter-spacing:5px;color:#fff}
   .dl-hero p{color:var(--dim);letter-spacing:2px;font-size:12px;text-transform:uppercase;margin:4px 0 0}
-  .ver{display:inline-block;margin-top:10px;font-size:12px;font-weight:700;letter-spacing:1.5px;color:var(--acc2);border:1px solid var(--acc);border-radius:999px;padding:3px 14px;background:rgba(245,166,35,.08)}
+  .ver{display:inline-block;margin-top:10px;font-size:12px;font-weight:700;letter-spacing:1.5px;color:var(--acc2);border:1px solid var(--acc);border-radius:999px;padding:3px 14px;background:rgba(245,166,35,.08);animation:verpulse 2.4s ease-in-out infinite}
+  @keyframes verpulse{0%,100%{box-shadow:0 0 0 rgba(245,166,35,0)}50%{box-shadow:0 0 18px rgba(245,166,35,.45)}}
+  .dl-hero{position:relative;overflow:hidden}
+  .dl-hero::after{content:"";position:absolute;inset:-45%;background:conic-gradient(from 0deg,transparent 68%,rgba(245,166,35,.14),transparent 86%);animation:spin 9s linear infinite;pointer-events:none}
+  .dl-hero>*{position:relative;z-index:1}
+  .dl-btns .btn.primary{position:relative;overflow:hidden}
+  .dl-btns .btn.primary::after{content:"";position:absolute;top:0;left:-70%;width:45%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.28),transparent);animation:shine 3.2s ease-in-out infinite;pointer-events:none}
+  @keyframes shine{0%{left:-70%}55%,100%{left:135%}}
+  .dl-card{position:relative;overflow:hidden}
+  .dl-card::before{content:"";position:absolute;top:0;left:10%;right:10%;height:1px;background:linear-gradient(90deg,transparent,rgba(245,166,35,.5),transparent)}
   .trailer{position:relative;border:1px solid var(--line);border-radius:20px;overflow:hidden;background:#000;animation:rise .35s both;box-shadow:0 14px 44px rgba(0,0,0,.55)}
   .trailer video{display:block;width:100%;max-height:46vh;background:#000}
   .trailer-tag{position:absolute;top:10px;left:10px;z-index:2;font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--acc2);background:rgba(0,0,0,.65);border:1px solid var(--acc);border-radius:999px;padding:3px 12px;backdrop-filter:blur(4px)}
@@ -51,7 +60,7 @@
     <img src="/AG.png" alt="Armor Game">
     <h1>ARMOR GAME</h1>
     <p>Удар, а не анимация · Windows и Android</p>
-    <div><span class="ver">v1.0 · бесплатно</span></div>
+    <div><span class="ver">v2.0 · бесплатно</span></div>
   </div>
 
   <div class="trailer" style="animation-delay:.03s">
@@ -63,12 +72,12 @@
     <div class="dl-ico"><svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 10.5 4.4v7.1H3zM11.6 4.2 21 3v8.5h-9.4zM3 12.5h7.5v7.1L3 18.5zM11.6 12.5H21V21l-9.4-1.2z"/></svg></div>
     <div class="dl-info">
       <b>Windows</b>
-      <small>ArmorGame-v1.0.zip · ≈14 МБ · Windows 10/11 x64</small>
-      <div class="dl-hash"><span>SHA256:</span><code id="h-exe" title="F2935431F674FEC64B00D4C5A75503644F722E49AD918FC2F022CDADCE29A11D">F2935431…CE29A11D</code><button type="button" data-copy="F2935431F674FEC64B00D4C5A75503644F722E49AD918FC2F022CDADCE29A11D">Копия</button></div>
+      <small>ArmorGame.exe · ≈14 МБ · Windows 10/11 x64</small>
+      <div class="dl-hash"><span>SHA256:</span><code id="h-exe" title="4A4274E30C40150DAAC457D5F167AA4AF2B18EC89076BA337D6B63FC5A427AC8">4A4274E3…5A427AC8</code><button type="button" data-copy="4A4274E30C40150DAAC457D5F167AA4AF2B18EC89076BA337D6B63FC5A427AC8">Копия</button></div>
     </div>
     <div class="dl-btns">
-      <a class="btn primary" href="https://files.catbox.moe/oghm03.zip" download="ArmorGame-v1.0.zip">Скачать .zip</a>
-      <a class="btn small vt" href="https://www.virustotal.com/gui/file/f2935431f674fec64b00d4c5a75503644f722e49ad918fc2f022cdadce29a11d" target="_blank" rel="noopener">VirusTotal</a>
+      <a class="btn primary" href="https://workupload.com/file/9PjggnMYuee" target="_blank" rel="noopener" download="ArmorGame.exe">Скачать .exe</a>
+      <a class="btn small vt" href="https://www.virustotal.com/gui/file/4a4274e30c40150daac457d5f167aa4af2b18ec89076ba337d6b63fc5a427ac8" target="_blank" rel="noopener">VirusTotal</a>
     </div>
   </div>
 
@@ -80,7 +89,7 @@
       <div class="dl-hash"><span>SHA256:</span><code id="h-apk" title="438ADCC4308E90A949AC9713819910C8B9FD4DB6DC656A75B35F875F4911B055">438ADCC4…4911B055</code><button type="button" data-copy="438ADCC4308E90A949AC9713819910C8B9FD4DB6DC656A75B35F875F4911B055">Копия</button></div>
     </div>
     <div class="dl-btns">
-      <a class="btn primary" href="https://files.catbox.moe/67e1at.apk" download="ArmorGame.apk">Скачать .apk</a>
+      <a class="btn primary" href="https://workupload.com/file/7XPjfKv8VxG" target="_blank" rel="noopener" download="ArmorGame.apk">Скачать .apk</a>
       <a class="btn small vt" href="https://www.virustotal.com/gui/file/438adcc4308e90a949ac9713819910c8b9fd4db6dc656a75b35f875f4911b055" target="_blank" rel="noopener">VirusTotal</a>
     </div>
   </div>
@@ -96,9 +105,8 @@
     <div class="step" style="animation-delay:.22s">
       <b>Windows — установка</b>
       <ol>
-        <li>Скачай <b>архив .zip</b></li>
-        <li>Распакуй его (правой кнопкой → «Извлечь всё»)</li>
-        <li>Запусти <b>ArmorGame.exe</b> из папки</li>
+        <li>Скачай <b>ArmorGame.exe</b> с WorkUpload</li>
+        <li>Запусти двойным кликом</li>
         <li>Если SmartScreen ругнётся — «Подробнее» → «Выполнить в любом случае»</li>
       </ol>
     </div>
